@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>activeFriends - Feed Card Explorer</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f3ef;
+    --surface: #ffffff;
+    --surface-alt: #f0f5f3;
+    --border: #e2dfd8;
+    --text: #26241f;
+    --muted: #77746c;
+    --teal: #14827b;
+    --coral: #e07a62;
+    --blue: #4e7fa6;
+    --gold: #b58a2d;
+    --violet: #7a6aa8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px 24px 64px; background: var(--bg); color: var(--text); font-family: Satoshi, system-ui, sans-serif; }
+  header { max-width: 1240px; margin: 0 auto 34px; }
+  .eyebrow { color: var(--teal); font-size: 12px; font-weight: 900; letter-spacing: .11em; }
+  h1 { margin: 8px 0 10px; font-size: 36px; font-weight: 900; }
+  .intro { max-width: 760px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(235px, 1fr)); gap: 22px; max-width: 1240px; margin: auto; }
+  .option { min-width: 0; }
+  .option h2 { margin: 0 0 5px; font-size: 16px; font-weight: 900; }
+  .option p { min-height: 43px; margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .phone { height: 630px; overflow: hidden; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); box-shadow: 0 18px 36px -26px rgba(38,36,31,.36); }
+  .appbar { display: flex; justify-content: space-between; padding: 20px 16px 14px; font-size: 16px; font-weight: 900; }
+  .refresh { color: var(--text); font-size: 24px; line-height: 1; }
+  .content { padding: 4px 12px 24px; }
+  .marker { display: flex; align-items: center; gap: 7px; color: var(--teal); font-size: 10px; font-weight: 900; letter-spacing: .09em; }
+  .marker i { width: 3px; height: 13px; border-radius: 2px; background: var(--teal); }
+  .content h3 { margin: 10px 0 18px; font-size: 24px; font-weight: 900; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; height: 39px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 22px; overflow: hidden; font-size: 13px; font-weight: 800; text-align: center; }
+  .tabs div { display: grid; place-items: center; }
+  .tabs .active { background: var(--teal); color: white; }
+  .cards { display: grid; gap: 9px; }
+  .card { position: relative; min-height: 135px; padding: 12px 11px 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .card.alt { background: var(--surface-alt); }
+  .card.rail::before { content: ''; position: absolute; top: 11px; bottom: 11px; left: 0; width: 4px; border-radius: 0 3px 3px 0; background: var(--activity); }
+  .card.tinted { border-color: color-mix(in srgb, var(--activity) 38%, var(--border)); }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--avatar); color: white; font-size: 12px; font-weight: 900; }
+  .name { flex: 1; font-size: 14px; font-weight: 900; }
+  .date { color: var(--muted); font-size: 10px; }
+  .activity { display: flex; align-items: center; gap: 7px; margin-top: 13px; color: var(--activity); font-size: 13px; font-weight: 900; }
+  .activity .icon { font-size: 16px; }
+  .points { margin-left: auto; color: var(--text); font-size: 13px; }
+  .metrics { margin-top: 7px; color: var(--muted); font-size: 12px; }
+  .rule { height: 1px; margin-top: 12px; background: var(--border); }
+  .social { display: flex; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .social .heart { color: var(--coral); }
+  .run { --activity: var(--coral); --avatar: #7a6aa8; }
+  .walk { --activity: var(--teal); --avatar: #5f7e9e; }
+  .cycle { --activity: var(--blue); --avatar: #4e7fa6; }
+  .strength { --activity: var(--gold); --avatar: #8a7340; }
+  .recommend { outline: 2px solid rgba(20,130,123,.24); outline-offset: 4px; }
+  .badge { display: inline-block; margin-top: 14px; padding: 5px 8px; border-radius: 5px; background: #e3f1ee; color: var(--teal); font-size: 10px; font-weight: 900; }
+  @media (max-width: 1120px) { .grid { grid-template-columns: repeat(2, minmax(235px, 1fr)); max-width: 720px; } }
+  @media (max-width: 560px) { body { padding: 24px 16px 48px; } h1 { font-size: 29px; } .grid { grid-template-columns: 1fr; max-width: 340px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">ACTIVEFRIENDS - FEED CARD STUDY</div>
+  <h1>Give the Feed a rhythm</h1>
+  <p class="intro">Compare activity meaning and list rhythm separately. The activity color identifies Run, Walk, Cycle or Strength. The alternate surface only helps the eye separate neighboring cards.</p>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--coral)"></i>Run</span>
+    <span><i class="dot" style="background:var(--teal)"></i>Walk</span>
+    <span><i class="dot" style="background:var(--blue)"></i>Cycle</span>
+    <span><i class="dot" style="background:var(--gold)"></i>Strength</span>
+  </div>
+</header>
+<main class="grid">
+  <section class="option">
+    <h2>A. Current neutral cards</h2>
+    <p>Everything uses the same gray outline. Clean, but activity types have no visual identity.</p>
+    <div class="phone"><div class="appbar">Circuit Runners <span class="refresh">↻</span></div><div class="content"><div class="marker"><i></i> ACTIVITY FEED</div><h3>Recent activity</h3><div class="tabs"><div class="active">✓ All</div><div>Mine</div></div><div class="cards"><div class="card run"><div class="top"><div class="avatar">M</div><div class="name">Mayya</div><div class="date">12/9 20:29</div></div><div class="activity"><span class="icon">♟</span> Run <span class="points">0.6 pts</span></div><div class="metrics">0.6 km · 6.77 min</div><div class="rule"></div><div class="social"><span class="heart">♡ 0</span><span>▢ 0</span></div></div><div class="card strength"><div class="top"><div class="avatar">D</div><div class="name">DK</div><div class="date">9/9 18:30</div></div><div class="activity"><span class="icon">✣</span> Strength <span class="points">3.0 pts</span></div><div class="metrics">45.00 min · 260 kcal</div><div class="rule"></div><div class="social"><span class="heart">♡ 1</span><span>▢ 0</span></div></div></div></div></div>
+  </section>
+  <section class="option">
+    <h2>B. Activity-colored borders</h2>
+    <p>A subtle border tint carries activity meaning, while the card remains restrained.</p>
+    <div class="phone"><div class="appbar">Circuit Runners <span class="refresh">↻</span></div><div class="content"><div class="marker"><i></i> ACTIVITY FEED</div><h3>Recent activity</h3><div class="tabs"><div class="active">✓ All</div><div>Mine</div></div><div class="cards"><div class="card run tinted"><div class="top"><div class="avatar">M</div><div class="name">Mayya</div><div class="date">12/9 20:29</div></div><div class="activity"><span class="icon">♟</span> Run <span class="points">0.6 pts</span></div><div class="metrics">0.6 km · 6.77 min</div><div class="rule"></div><div class="social"><span class="heart">♡ 0</span><span>▢ 0</span></div></div><div class="card strength tinted"><div class="top"><div class="avatar">D</div><div class="name">DK</div><div class="date">9/9 18:30</div></div><div class="activity"><span class="icon">✣</span> Strength <span class="points">3.0 pts</span></div><div class="metrics">45.00 min · 260 kcal</div><div class="rule"></div><div class="social"><span class="heart">♡ 1</span><span>▢ 0</span></div></div></div></div></div>
+  </section>
+  <section class="option">
+    <h2>C. Alternating surfaces</h2>
+    <p>List rhythm only. Cards alternate between the normal surface and a quiet mint surface.</p>
+    <div class="phone"><div class="appbar">Circuit Runners <span class="refresh">↻</span></div><div class="content"><div class="marker"><i></i> ACTIVITY FEED</div><h3>Recent activity</h3><div class="tabs"><div class="active">✓ All</div><div>Mine</div></div><div class="cards"><div class="card run"><div class="top"><div class="avatar">M</div><div class="name">Mayya</div><div class="date">12/9 20:29</div></div><div class="activity"><span class="icon">♟</span> Run <span class="points">0.6 pts</span></div><div class="metrics">0.6 km · 6.77 min</div><div class="rule"></div><div class="social"><span class="heart">♡ 0</span><span>▢ 0</span></div></div><div class="card strength alt"><div class="top"><div class="avatar">D</div><div class="name">DK</div><div class="date">9/9 18:30</div></div><div class="activity"><span class="icon">✣</span> Strength <span class="points">3.0 pts</span></div><div class="metrics">45.00 min · 260 kcal</div><div class="rule"></div><div class="social"><span class="heart">♡ 1</span><span>▢ 0</span></div></div></div></div></div>
+  </section>
+  <section class="option">
+    <h2>D. Recommended combination</h2>
+    <p>Semantic activity rail plus alternating surface. Each visual treatment has one clear job.</p>
+    <div class="phone recommend"><div class="appbar">Circuit Runners <span class="refresh">↻</span></div><div class="content"><div class="marker"><i></i> ACTIVITY FEED</div><h3>Recent activity</h3><div class="tabs"><div class="active">✓ All</div><div>Mine</div></div><div class="cards"><div class="card run rail"><div class="top"><div class="avatar">M</div><div class="name">Mayya</div><div class="date">12/9 20:29</div></div><div class="activity"><span class="icon">♟</span> Run <span class="points">0.6 pts</span></div><div class="metrics">0.6 km · 6.77 min</div><div class="rule"></div><div class="social"><span class="heart">♡ 0</span><span>▢ 0</span></div></div><div class="card strength rail alt"><div class="top"><div class="avatar">D</div><div class="name">DK</div><div class="date">9/9 18:30</div></div><div class="activity"><span class="icon">✣</span> Strength <span class="points">3.0 pts</span></div><div class="metrics">45.00 min · 260 kcal</div><div class="rule"></div><div class="social"><span class="heart">♡ 1</span><span>▢ 0</span></div></div></div><span class="badge">RECOMMENDED: meaning + rhythm</span></div></div>
+  </section>
+</main>
+</body>
+</html>

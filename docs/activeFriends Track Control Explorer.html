@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>activeFriends - Track Control Explorer</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F3EF;
+    --surface: #FFFFFF;
+    --border: #E2DFD8;
+    --text: #26241F;
+    --muted: #6E6C66;
+    --primary: #14827B;
+    --primary-soft: #E3F1EE;
+    --coral: #E07A62;
+    --gold: #C79A17;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px 24px 64px; background: var(--bg); color: var(--text); font-family: Satoshi, system-ui, sans-serif; }
+  header { max-width: 1220px; margin: 0 auto 34px; }
+  .eyebrow { color: var(--primary); font-size: 12px; font-weight: 900; letter-spacing: .11em; }
+  h1 { margin: 8px 0 10px; font-size: 34px; font-weight: 900; }
+  .intro { max-width: 680px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 24px; max-width: 1220px; margin: auto; }
+  .option { min-width: 0; }
+  .option h2 { margin: 0 0 5px; font-size: 16px; font-weight: 900; }
+  .option p { min-height: 44px; margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .phone { height: 530px; background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 14px 10px 0; overflow: hidden; box-shadow: 0 18px 36px -26px rgba(38,36,31,.36); display: flex; flex-direction: column; }
+  .notch { align-self: center; width: 88px; height: 17px; margin-top: -14px; border-radius: 0 0 12px 12px; background: var(--text); }
+  .appbar { padding: 16px 8px; font-size: 16px; font-weight: 900; }
+  .content { flex: 1; padding: 6px 10px; }
+  .marker { display: flex; gap: 7px; align-items: center; color: var(--primary); font-size: 10px; font-weight: 900; letter-spacing: .09em; }
+  .marker i { width: 3px; height: 13px; border-radius: 2px; background: var(--primary); }
+  .content h3 { margin: 10px 0 4px; font-size: 23px; font-weight: 900; }
+  .content span { color: var(--muted); font-size: 12px; }
+  .rows { margin-top: 24px; display: grid; gap: 8px; }
+  .row { height: 52px; border: 1px solid var(--border); border-radius: 8px; padding: 9px; display: flex; align-items: center; gap: 9px; }
+  .avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #356F94; color: white; font-weight: 900; font-size: 12px; }
+  .line { height: 8px; flex: 1; border-radius: 4px; background: var(--primary-soft); }
+  .points { width: 30px; height: 8px; border-radius: 4px; background: var(--coral); }
+  .nav { height: 84px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; text-align: center; color: var(--muted); font-size: 10px; font-weight: 700; position: relative; }
+  .nav-item { display: grid; gap: 5px; justify-items: center; }
+  .nav svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+  .track { position: relative; color: var(--primary); display: grid; justify-items: center; gap: 2px; cursor: pointer; min-width: 56px; min-height: 56px; align-content: center; }
+  .track:focus { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 8px; }
+  .track svg { width: 29px; height: 29px; }
+  .track-label { font-size: 10px; font-weight: 900; }
+  .route svg { width: 34px; }
+  .chevrons svg { width: 34px; }
+  .floating-chevron { position: absolute; left: 50%; top: -31px; transform: translateX(-50%); width: 62px; height: 62px; border: 1px solid rgba(255,255,255,.74); border-radius: 16px; background: rgba(227,241,238,.76); color: var(--primary); display: grid; place-items: center; cursor: pointer; box-shadow: 0 10px 18px -10px rgba(20,130,123,.48), inset 0 1px 1px rgba(255,255,255,.96), inset 0 -2px 3px rgba(20,130,123,.12); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .floating-chevron::after { content: ''; position: absolute; inset: 4px; border-radius: 12px; border: 1px solid rgba(20,130,123,.13); pointer-events: none; }
+  .floating-chevron svg { width: 34px; height: 34px; stroke-width: 2.8; filter: drop-shadow(0 1px 0 rgba(255,255,255,.9)); z-index: 1; }
+  .floating-chevron:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 14px 22px -10px rgba(20,130,123,.54), inset 0 1px 1px rgba(255,255,255,.96), inset 0 -2px 3px rgba(20,130,123,.12); }
+  .floating-chevron:active { transform: translateX(-50%) translateY(1px); box-shadow: 0 5px 10px -8px rgba(20,130,123,.45), inset 0 2px 4px rgba(20,130,123,.18); }
+  .floating-chevron:focus { outline: 2px solid var(--primary); outline-offset: 3px; }
+  .needle svg { width: 30px; }
+  .a .track svg { filter: drop-shadow(0 4px 5px rgba(20,130,123,.18)); }
+  .b .track { color: #4E7FA6; }
+  .c .track { color: var(--coral); }
+  .d .track { color: var(--gold); }
+  .selected { display: inline-block; margin-top: 12px; padding: 6px 9px; background: var(--primary-soft); color: var(--primary); border-radius: 6px; font-size: 11px; font-weight: 900; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(240px, 1fr)); max-width: 680px; } }
+  @media (max-width: 560px) { body { padding: 24px 16px 48px; } h1 { font-size: 28px; } .grid { grid-template-columns: 1fr; max-width: 340px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">ACTIVEFRIENDS - M4 CONTROL STUDY</div>
+  <h1>Choose the tracking action</h1>
+  <p class="intro">Four center-navigation treatments at the same size. Each has a comfortable invisible touch target; only the icon treatment changes.</p>
+</header>
+<main class="grid">
+  <section class="option a">
+    <h2>A. Motion Arrow</h2>
+    <p>Direct, athletic and immediately legible. The strongest candidate for the default.</p>
+    <div class="phone">
+      <div class="notch"></div><div class="appbar">Circuit Runners</div>
+      <div class="content"><div class="marker"><i></i> WEEKLY LEADERBOARD</div><h3>This week</h3><span>Monday to Sunday</span><div class="rows"><div class="row"><div class="avatar">M</div><div class="line"></div><div class="points"></div></div><div class="row"><div class="avatar">R</div><div class="line"></div><div class="points"></div></div></div></div>
+      <nav class="nav" aria-label="Application navigation"><div class="nav-item"><svg viewBox="0 0 24 24"><path d="M4 19v-7M10 19V5M16 19v-9M22 19V3"/></svg>Leaderboard</div><button class="track" aria-label="Track activity"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg><span class="track-label">TRACK</span></button><div class="nav-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5 21c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>Me</div></nav>
+    </div><span class="selected">Recommended</span>
+  </section>
+  <section class="option b">
+    <h2>B. Route Arrow</h2>
+    <p>A curve that resolves into motion. More explicitly GPS-oriented and slightly more expressive.</p>
+    <div class="phone">
+      <div class="notch"></div><div class="appbar">Circuit Runners</div>
+      <div class="content"><div class="marker"><i></i> WEEKLY LEADERBOARD</div><h3>This week</h3><span>Monday to Sunday</span><div class="rows"><div class="row"><div class="avatar">M</div><div class="line"></div><div class="points"></div></div><div class="row"><div class="avatar">R</div><div class="line"></div><div class="points"></div></div></div></div>
+      <nav class="nav" aria-label="Application navigation"><div class="nav-item"><svg viewBox="0 0 24 24"><path d="M4 19v-7M10 19V5M16 19v-9M22 19V3"/></svg>Leaderboard</div><button class="track route" aria-label="Track activity"><svg viewBox="0 0 24 24"><path d="M3 18c3-7 6-7 10-4 2 2 4 1 7-3"/><path d="M16 8h4v4"/></svg><span class="track-label">TRACK</span></button><div class="nav-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5 21c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>Me</div></nav>
+    </div>
+  </section>
+  <section class="option c">
+    <h2>C. Floating Split Chevron</h2>
+    <p>The >> motion mark floats over the navigation center with no visible container.</p>
+    <div class="phone">
+      <div class="notch"></div><div class="appbar">Circuit Runners</div>
+      <div class="content"><div class="marker"><i></i> WEEKLY LEADERBOARD</div><h3>This week</h3><span>Monday to Sunday</span><div class="rows"><div class="row"><div class="avatar">M</div><div class="line"></div><div class="points"></div></div><div class="row"><div class="avatar">R</div><div class="line"></div><div class="points"></div></div></div></div>
+      <nav class="nav" aria-label="Application navigation"><div class="nav-item"><svg viewBox="0 0 24 24"><path d="M4 19v-7M10 19V5M16 19v-9M22 19V3"/></svg>Leaderboard</div><div></div><div class="nav-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5 21c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>Me</div><button class="floating-chevron" aria-label="Track activity"><svg viewBox="0 0 24 24"><path d="m5 5 6 7-6 7" stroke="#E07A62"/><path d="m13 5 6 7-6 7" stroke="#14827B"/></svg></button></nav>
+    </div>
+  </section>
+  <section class="option d">
+    <h2>D. Compass Needle</h2>
+    <p>Premium outdoor navigation feel. Attractive, but less obvious than an arrow for a first launch.</p>
+    <div class="phone">
+      <div class="notch"></div><div class="appbar">Circuit Runners</div>
+      <div class="content"><div class="marker"><i></i> WEEKLY LEADERBOARD</div><h3>This week</h3><span>Monday to Sunday</span><div class="rows"><div class="row"><div class="avatar">M</div><div class="line"></div><div class="points"></div></div><div class="row"><div class="avatar">R</div><div class="line"></div><div class="points"></div></div></div></div>
+      <nav class="nav" aria-label="Application navigation"><div class="nav-item"><svg viewBox="0 0 24 24"><path d="M4 19v-7M10 19V5M16 19v-9M22 19V3"/></svg>Leaderboard</div><button class="track needle" aria-label="Track activity"><svg viewBox="0 0 24 24"><path d="m14 4 6 6-10 10-6-6z"/><path d="m10 20 4-16"/></svg><span class="track-label">TRACK</span></button><div class="nav-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5 21c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>Me</div></nav>
+    </div>
+  </section>
+</main>
+</body>
+</html>

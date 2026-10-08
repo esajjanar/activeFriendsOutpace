@@ -1,0 +1,62 @@
+# ─── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+._*
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# ─── Flutter / Dart ───────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins-dependencies
+.packages
+**/build/
+**/coverage/
+app.*.symbols
+app.*.map.json
+
+# Generated Drift database code — regenerate with:
+#   cd app && dart run build_runner build
+# Uncomment the next line if you prefer not to commit generated code:
+# *.g.dart
+
+# ─── Android ──────────────────────────────────────────────────────────────────
+.gradle/
+.kotlin/
+local.properties
+key.properties
+*.jks
+google-services.json
+
+# ─── iOS ──────────────────────────────────────────────────────────────────────
+Pods/
+.symlinks/
+**/Flutter/ephemeral/
+**/Flutter/.last_build_id
+**/xcuserdata/
+GoogleService-Info.plist
+Podfile.lock
+
+# ─── Firebase ─────────────────────────────────────────────────────────────────
+firebase_options.dart
+*-firebase-adminsdk-*.json
+
+# ─── Supabase ─────────────────────────────────────────────────────────────────
+supabase/.temp/
+
+# ─── Secrets / sensitive data (never commit) ──────────────────────────────────
+*.dump
+*.keystore
+*.p12
+*.mobileprovision
+supabase_logs.json
+
+# ─── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+package-lock.json
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+*.log
