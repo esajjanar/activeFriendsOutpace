@@ -185,6 +185,224 @@ class _ClubsScreenState extends State<ClubsScreen> {
         .showSnackBar(const SnackBar(content: Text('Active club updated.')));
   }
 
+  Future<void> _deleteClub(ClubSummary club) async {
+    // Step 1: warning dialog
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete club?'),
+        content: Text(
+          'This will permanently delete "${club.name}" and:\n\n'
+          '• Remove all members\n'
+          '• Delete the leaderboard / weekly snapshot history\n'
+          '• Invalidate all invite codes\n\n'
+          'Activities are kept — they just won\'t be tied to this club.\n\n'
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor:
+                  Theme.of(context).extension<AppColors>()!.danger,
+            ),
+            child: const Text('I understand, continue'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return;
+
+    // Step 2: type-to-confirm dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        var typedName = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final matches = typedName == club.name;
+            return AlertDialog(
+              title: const Text('Type club name to confirm'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Type "${club.name}" exactly to delete:'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: club.name,
+                      isDense: true,
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => typedName = value),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: matches
+                      ? () => Navigator.of(context).pop(true)
+                      : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).extension<AppColors>()!.danger,
+                    disabledBackgroundColor:
+                        Theme.of(context).extension<AppColors>()!.danger.withValues(alpha: 0.3),
+                  ),
+                  child: const Text('Delete permanently'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await _repository.deleteClub(club.id);
+      if (!mounted) return;
+      final clubs = await _repository.listMine();
+      if (!mounted) return;
+      if (_activeClubId == club.id) {
+        final next = clubs.firstOrNull;
+        if (next != null) {
+          await _selectClub(next.id);
+        } else {
+          await ActiveClubStore.write('');
+          setState(() => _activeClubId = null);
+          widget.onActiveClubChanged?.call('');
+        }
+      }
+      setState(() => _clubsFuture = Future.value(clubs));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Club "${club.name}" deleted.')),
+        );
+      }
+    } on PostgrestException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not delete the club. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _leaveClub(ClubSummary club) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        var typedName = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final matches = typedName == club.name;
+            return AlertDialog(
+              title: const Text('Leave club?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You will be removed from "${club.name}". '
+                    'Your activities will remain but won\'t appear in this club\'s '
+                    'leaderboard or feed for other members.\n\n'
+                    'You can rejoin later with a new invite code.',
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Type the club name exactly to confirm:',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: club.name,
+                      isDense: true,
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => typedName = value),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: matches
+                      ? () => Navigator.of(context).pop(true)
+                      : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).extension<AppColors>()!.danger,
+                    disabledBackgroundColor:
+                        Theme.of(context).extension<AppColors>()!.danger.withValues(alpha: 0.3),
+                  ),
+                  child: const Text('Leave'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await _repository.leaveClub(club.id);
+      if (!mounted) return;
+      // If the user left the active club, clear it and pick another.
+      final clubs = await _repository.listMine();
+      if (!mounted) return;
+      if (_activeClubId == club.id) {
+        final next = clubs.firstOrNull;
+        if (next != null) {
+          await _selectClub(next.id);
+        } else {
+          await ActiveClubStore.write('');
+          setState(() => _activeClubId = null);
+          widget.onActiveClubChanged?.call('');
+        }
+      }
+      setState(() => _clubsFuture = Future.value(clubs));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You left "${club.name}".')),
+        );
+      }
+    } on PostgrestException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not leave the club. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   Future<void> _createInviteCode(String clubId) async {
     setState(() => _isSubmitting = true);
     try {
@@ -303,74 +521,108 @@ class _ClubsScreenState extends State<ClubsScreen> {
               ),
               const SizedBox(height: 12),
               if (clubs.isNotEmpty)
-                Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: theme.colorScheme.primary),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _activeClubId ?? activeClub?.id,
-                      isExpanded: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      borderRadius: BorderRadius.circular(10),
-                      icon: Icon(
-                        Icons.expand_more,
-                        color: theme.colorScheme.primary,
-                      ),
-                      items: clubs
-                          .map(
-                            (club) => DropdownMenuItem(
-                              value: club.id,
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      club.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: club.role == 'admin'
-                                          ? theme.colorScheme.primary
-                                          : colors.border,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      club.role,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            color: club.role == 'admin'
-                                                ? Colors.white
-                                                : colors.textMuted,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.3,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: theme.colorScheme.primary),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _activeClubId ?? activeClub?.id,
+                            isExpanded: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            borderRadius: BorderRadius.circular(10),
+                            icon: Icon(
+                              Icons.expand_more,
+                              color: theme.colorScheme.primary,
                             ),
-                          )
-                          .toList(),
-                      onChanged: _isSubmitting
-                          ? null
-                          : (clubId) =>
-                                clubId == null ? null : _selectClub(clubId),
+                            items: clubs
+                                .map(
+                                  (club) => DropdownMenuItem(
+                                    value: club.id,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            club.name,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: club.role == 'admin'
+                                                ? theme.colorScheme.primary
+                                                : colors.border,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            club.role,
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  color: club.role == 'admin'
+                                                      ? Colors.white
+                                                      : colors.textMuted,
+                                                  fontWeight: FontWeight.w700,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _isSubmitting
+                                ? null
+                                : (clubId) =>
+                                      clubId == null ? null : _selectClub(clubId),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (activeClub != null) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => _leaveClub(activeClub),
+                        tooltip: 'Leave club',
+                        icon: Icon(
+                          Icons.exit_to_app,
+                          size: 24,
+                          color: colors.danger,
+                        ),
+                      ),
+                      if (activeClub.role == 'admin') ...[
+                        const SizedBox(width: 2),
+                        IconButton(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => _deleteClub(activeClub),
+                          tooltip: 'Delete club',
+                          icon: Icon(
+                            Icons.delete_forever,
+                            size: 20,
+                            color: colors.danger,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
               const _SectionLabel(label: 'WATCH IMPORT'),
               const SizedBox(height: 12),
               const WatchImportSection(),
@@ -483,3 +735,4 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
+

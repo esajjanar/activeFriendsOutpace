@@ -416,7 +416,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                           _Metric(
                             label: 'Distance',
                             value:
-                                '${((activity['distance_m'] as num) / 1000).toStringAsFixed(1)} km',
+                                '${((activity['distance_m'] as num) / 1000).toStringAsFixed(2)} km',
                             tone: _MetricTone.neutral,
                           ),
                         if (activity['moving_time_s'] != null)

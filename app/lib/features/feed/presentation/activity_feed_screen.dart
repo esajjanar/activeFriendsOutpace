@@ -442,6 +442,20 @@ class _FeedCard extends StatefulWidget {
     _ => 'Manual',
   };
 
+  static IconData _sourceIcon(String source) => switch (source) {
+    'health_connect' => Icons.watch,
+    'healthkit' => Icons.watch,
+    'phone_gps' => Icons.gps_fixed,
+    _ => Icons.edit_note,
+  };
+
+  static Color _sourceColor(String source) => switch (source) {
+    'health_connect' => const Color(0xFF4CAF50),
+    'healthkit' => const Color(0xFFFF6B35),
+    'phone_gps' => const Color(0xFF2196F3),
+    _ => const Color(0xFF9E9E9E),
+  };
+
   static Color _avatarColor(String id) {
     const palette = [
       Color(0xFFC2554F),
@@ -698,10 +712,31 @@ class _FeedCardState extends State<_FeedCard> {
                         ?.copyWith(color: colors.textMuted),
                   ),
                   const Spacer(),
-                  Text(
-                    _FeedCard._sourceLabel(widget.activity.source),
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: colors.textFaint),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _FeedCard._sourceColor(widget.activity.source)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _FeedCard._sourceIcon(widget.activity.source),
+                          size: 13,
+                          color: _FeedCard._sourceColor(widget.activity.source),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _FeedCard._sourceLabel(widget.activity.source),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: _FeedCard._sourceColor(widget.activity.source),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -778,7 +813,7 @@ class _MetricsRow extends StatelessWidget {
     if (activity.distanceM != null) {
       items.add(_StatItem(
         icon: Icons.route,
-        label: '${(activity.distanceM! / 1000).toStringAsFixed(1)} km',
+        label: '${(activity.distanceM! / 1000).toStringAsFixed(2)} km',
         color: _distanceColor,
         style: valueStyle,
       ));

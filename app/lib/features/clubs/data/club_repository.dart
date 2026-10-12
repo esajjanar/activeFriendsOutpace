@@ -28,6 +28,20 @@ class ClubRepository {
     return data['code'] as String;
   }
 
+  Future<void> deleteClub(String clubId) async {
+    await _client.from('clubs').delete().eq('id', clubId);
+  }
+
+  Future<void> leaveClub(String clubId) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw StateError('Not signed in');
+    await _client
+        .from('club_members')
+        .delete()
+        .eq('club_id', clubId)
+        .eq('user_id', user.id);
+  }
+
   Future<List<ClubSummary>> listMine() async {
     final user = _client.auth.currentUser;
     if (user == null) return const [];

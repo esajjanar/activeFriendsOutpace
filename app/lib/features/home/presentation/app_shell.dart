@@ -290,25 +290,59 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 if (!mounted) return;
                 final confirm = await showDialog<bool>(
                   context: context,
-                  builder: (dlg) => AlertDialog(
-                    title: const Text('Delete account?'),
-                    content: const Text(
-                      'This will permanently delete your account, all your activities, and remove you from all clubs. This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dlg).pop(false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        onPressed: () => Navigator.of(dlg).pop(true),
-                        child: const Text('Delete permanently'),
-                      ),
-                    ],
-                  ),
+                  builder: (dlg) {
+                    var typed = '';
+                    return StatefulBuilder(
+                      builder: (dlg, setDialogState) {
+                        final matches = typed == 'delete my account';
+                        return AlertDialog(
+                          title: const Text('Delete account?'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'This will permanently delete your account, all your activities, and remove you from all clubs. This cannot be undone.',
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Type "delete my account" to confirm:',
+                                style: Theme.of(dlg).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'delete my account',
+                                  isDense: true,
+                                ),
+                                onChanged: (value) =>
+                                    setDialogState(() => typed = value),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dlg).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                disabledBackgroundColor: Colors.red.withValues(alpha: 0.3),
+                              ),
+                              onPressed: matches
+                                  ? () => Navigator.of(dlg).pop(true)
+                                  : null,
+                              child: const Text('Delete permanently'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 );
                 if (confirm == true && mounted) {
                   try {

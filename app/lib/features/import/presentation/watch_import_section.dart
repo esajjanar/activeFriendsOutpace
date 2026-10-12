@@ -24,11 +24,15 @@ class _WatchImportSectionState extends State<WatchImportSection> {
         setState(() {
           final parts = <String>[];
           if (result.importedCount > 0) {
-            parts.add('${result.importedCount} synced');
+            final a = result.importedCount == 1 ? 'activity' : 'activities';
+            parts.add('${result.importedCount} new $a synced');
+          }
+          if (result.alreadySyncedCount > 0) {
+            parts.add('${result.alreadySyncedCount} already synced');
           }
           if (result.skippedDuplicates > 0) {
             final a = result.skippedDuplicates == 1 ? 'activity' : 'activities';
-            parts.add('${result.skippedDuplicates} $a already in Outpace');
+            parts.add('${result.skippedDuplicates} $a tracked via Outpace');
           }
           if (result.queuedCount > 0) {
             parts.add('${result.queuedCount} queued for sync');

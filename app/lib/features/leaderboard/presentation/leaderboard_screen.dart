@@ -214,7 +214,7 @@ class _LeaderboardPodium extends StatelessWidget {
         : [entries[1], entries[0], entries[2]];
     final ranks = entries.length == 2 ? [2, 1] : [2, 1, 3];
     return SizedBox(
-      height: 232,
+      height: 260,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -227,10 +227,10 @@ class _LeaderboardPodium extends StatelessWidget {
                 entry: order[index],
                 rank: ranks[index],
                 height: ranks[index] == 1
-                    ? 112
+                    ? 132
                     : ranks[index] == 2
-                    ? 90
-                    : 74,
+                    ? 110
+                    : 94,
               ),
             ),
         ],
@@ -319,8 +319,18 @@ class _PodiumColumn extends StatelessWidget {
                 Text(
                   'points',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: Colors.white.withValues(alpha: 0.70),
                     fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  entry.distanceM > 0
+                      ? '${(entry.distanceM / 1000).toStringAsFixed(2)} km'
+                      : '—',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFFFFE082).withValues(alpha: 0.90),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -376,7 +386,10 @@ class _LeaderboardRow extends StatelessWidget {
         ? colors.surfaceAlt
         : theme.colorScheme.surface;
     final rankColor = rank == 1 ? colors.gold : colors.textMuted;
-    return Container(
+    final isInactive = entry.points == 0;
+    return Opacity(
+      opacity: isInactive ? 0.45 : 1.0,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -432,6 +445,7 @@ class _LeaderboardRow extends StatelessWidget {
                 '${entry.points.toStringAsFixed(0)} points',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w900,
+                  color: entry.points == 0 ? colors.danger : null,
                 ),
               ),
               const SizedBox(height: 3),
@@ -451,20 +465,54 @@ class _LeaderboardRow extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
   static String _metricLabel(LeaderboardEntry entry) {
     final parts = <String>[];
     if (entry.distanceM > 0) {
-      parts.add('${(entry.distanceM / 1000).toStringAsFixed(1)} km');
+      parts.add('${(entry.distanceM / 1000).toStringAsFixed(2)} km');
     }
     if (entry.movingTimeS > 0) {
       parts.add(
         '${entry.movingTimeS ~/ 3600}h ${(entry.movingTimeS % 3600) ~/ 60}m',
       );
     }
-    return parts.isEmpty ? 'No activity yet' : parts.join(' · ');
+    if (parts.isNotEmpty) return parts.join(' · ');
+    const shameLines = [
+      'Still on the couch 🛋️',
+      'Sleeping in 😴',
+      'Netflix marathon? 🎬',
+      'MIA this week 👀',
+      'Ghosting the group 👻',
+      'Forgot their shoes 👟',
+      'Lost in the snack aisle 🍕',
+      'Charging their watch ⌚',
+      'Waiting for motivation 🐌',
+      'Hiding from the leaderboard 🫣',
+      'Training their thumbs instead 📱',
+      'Stuck in traffic 🚗',
+      'Blaming the weather ☁️',
+      'Stretching... since Monday 🧘',
+      'Perfecting their excuse 📝',
+      'In a food coma 🍔',
+      'Snoozed the alarm 5 times ⏰',
+      'Joined the wrong club? 🤔',
+      'Still lacing up 👟',
+      'Warming up the bench 🪑',
+      'Checking the weather app... again 🌧️',
+      'Resting for next week 😇',
+      'Plotting a comeback 🦸',
+      'Buffering... 🔄',
+      'On airplane mode ✈️',
+      'Napping like a pro 💤',
+      'Vibing, not moving 🎧',
+      'Leg day was yesterday 🦵',
+      'Ordered Uber instead 🚕',
+      'Zero steps, zero regrets 🤷',
+    ];
+    return shameLines[entry.memberId.codeUnits.fold<int>(0, (s, c) => s + c) % shameLines.length];
   }
 
   static IconData _activityIcon(String type) => switch (type) {
@@ -493,3 +541,4 @@ class _LeaderboardRow extends StatelessWidget {
         palette.length];
   }
 }
+

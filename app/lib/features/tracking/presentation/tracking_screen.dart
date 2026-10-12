@@ -374,70 +374,98 @@ class _TrackingScreenState extends State<TrackingScreen> {
       _activityId = const Uuid().v4();
     }
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _message = null;
+    });
     final activityId = _activityId ??= _sessionId ?? const Uuid().v4();
     const saveTimeout = Duration(seconds: 20);
-    try {
-      final endedAt = snapshot.startedAt.add(snapshot.elapsed);
-      await Supabase.instance.client
-          .from('activities')
-          .upsert({
-            'id': activityId,
-            'user_id': current.id,
-            'type': _type,
-            'started_at': snapshot.startedAt.toUtc().toIso8601String(),
-            'ended_at': endedAt.toUtc().toIso8601String(),
-            'distance_m': snapshot.distanceM.round(),
-            'moving_time_s': snapshot.movingTime.inSeconds,
-            'elapsed_s': snapshot.elapsed.inSeconds,
-            'source': 'phone_gps',
-            'external_id': const Uuid().v4(),
-            'track_summary': {
-              'elevation_gain_m': snapshot.elevationGainM.round(),
-              'max_speed_kmh': snapshot.maxSpeedKmh,
-              'max_elevation_m': snapshot.maxElevationM,
-            },
-            'status': 'synced',
-          }, onConflict: 'id')
-          .timeout(saveTimeout);
-      if (snapshot.points.isNotEmpty) {
+    const maxRetries = 3;
+    const retryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
+
+    for (var attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0 && mounted) {
+          setState(() => _message = 'Retrying… (attempt ${attempt + 1}/${maxRetries + 1})');
+        }
+        final endedAt = snapshot.startedAt.add(snapshot.elapsed);
         await Supabase.instance.client
-            .from('track_points')
-            .upsert([
-              for (final indexedPoint in snapshot.points.indexed)
-                {
-                  'activity_id': activityId,
-                  'seq': indexedPoint.$1,
-                  'lat': indexedPoint.$2.latitude,
-                  'lon': indexedPoint.$2.longitude,
-                  'ts': indexedPoint.$2.timestamp.toUtc().toIso8601String(),
-                  'ele': indexedPoint.$2.elevation,
-                  'accuracy': indexedPoint.$2.accuracy,
-                },
-            ], onConflict: 'activity_id,seq')
+            .from('activities')
+            .upsert({
+              'id': activityId,
+              'user_id': current.id,
+              'type': _type,
+              'started_at': snapshot.startedAt.toUtc().toIso8601String(),
+              'ended_at': endedAt.toUtc().toIso8601String(),
+              'distance_m': snapshot.distanceM.round(),
+              'moving_time_s': snapshot.movingTime.inSeconds,
+              'elapsed_s': snapshot.elapsed.inSeconds,
+              'source': 'phone_gps',
+              'external_id': const Uuid().v4(),
+              'track_summary': {
+                'elevation_gain_m': snapshot.elevationGainM.round(),
+                'max_speed_kmh': snapshot.maxSpeedKmh,
+                'max_elevation_m': snapshot.maxElevationM,
+              },
+              'status': 'synced',
+            }, onConflict: 'id')
             .timeout(saveTimeout);
+        if (snapshot.points.isNotEmpty) {
+          await Supabase.instance.client
+              .from('track_points')
+              .upsert([
+                for (final indexedPoint in snapshot.points.indexed)
+                  {
+                    'activity_id': activityId,
+                    'seq': indexedPoint.$1,
+                    'lat': indexedPoint.$2.latitude,
+                    'lon': indexedPoint.$2.longitude,
+                    'ts': indexedPoint.$2.timestamp.toUtc().toIso8601String(),
+                    'ele': indexedPoint.$2.elevation,
+                    'accuracy': indexedPoint.$2.accuracy,
+                  },
+              ], onConflict: 'activity_id,seq')
+              .timeout(saveTimeout);
+        }
+        final sessionId = _sessionId;
+        if (sessionId != null) {
+          _localRepository.deleteSession(sessionId).ignore();
+        }
+        _didSave = true;
+        if (mounted) Navigator.of(context).pop(activityId);
+        return;
+      } on TimeoutException {
+        if (attempt == maxRetries) {
+          if (mounted) {
+            setState(
+              () => _message = 'Saving timed out after ${maxRetries + 1} attempts. '
+                  'Your activity is still stored on this device. Try again when you have better signal.',
+            );
+          }
+        }
+      } catch (error) {
+        final isNetworkError = error.toString().contains('SocketException') ||
+            error.toString().contains('Failed host lookup') ||
+            error.toString().contains('Connection refused') ||
+            error.toString().contains('Network is unreachable') ||
+            error.toString().contains('ClientException');
+        if (!isNetworkError || attempt == maxRetries) {
+          if (mounted) {
+            final userMessage = isNetworkError
+                ? 'No internet connection. Your activity is safe on this device — tap Save when you are back online.'
+                : 'Activity could not be saved: $error';
+            setState(() => _message = userMessage);
+          }
+          break;
+        }
       }
-      final sessionId = _sessionId;
-      if (sessionId != null) {
-        _localRepository.deleteSession(sessionId).ignore();
+      // Wait before retrying (exponential backoff).
+      if (attempt < maxRetries) {
+        await Future<void>.delayed(retryDelays[attempt]);
+        if (!mounted) return;
       }
-      _didSave = true;
-      if (mounted) Navigator.of(context).pop(activityId);
-    } on TimeoutException {
-      if (mounted) {
-        setState(
-          () => _message = 'Saving timed out. Your activity is still stored on this device. Try again.',
-        );
-      }
-    } catch (error) {
-      // Surface the real error instead of swallowing it, so device-only
-      // failures (auth/RLS/network) can be diagnosed without ADB.
-      if (mounted) {
-        setState(() => _message = 'Activity could not be saved: $error');
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
     }
+    if (mounted) setState(() => _isSaving = false);
   }
 
   /// Shown when the signed-in account differs from the one that recorded the

@@ -12,6 +12,7 @@ class HealthImportResult {
     required this.historyAuthorized,
     required this.diagnostics,
     required this.skippedDuplicates,
+    required this.alreadySyncedCount,
   });
 
   final int importedCount;
@@ -21,6 +22,10 @@ class HealthImportResult {
   /// Count of imported workouts skipped because they overlap an existing
   /// Outpace activity (already logged — e.g. a ride also tracked via GPS).
   final int skippedDuplicates;
+
+  /// Count of activities that were already synced from a previous import
+  /// (re-scanned but not new).
+  final int alreadySyncedCount;
 
   /// Human-readable breakdown of the Health Connect / HealthKit read, shown
   /// only when nothing came through, so an empty result is explainable
@@ -128,9 +133,33 @@ class HealthImportService {
         .where((point) => point.type == HealthDataType.WORKOUT)
         .toList();
 
+    // Fetch external_ids already in Supabase so we can distinguish truly new
+    // imports from re-syncs of the same activity (the full-window rescan
+    // intentionally re-reads everything to catch late-syncing watches).
+    // If this lookup fails (offline / Supabase down), fall back to an empty
+    // set — every activity counts as "new", which matches the old behaviour
+    // and avoids blocking the import entirely.
+    var existingIds = <String>{};
+    try {
+      final existingRows = await _client
+          .from('activities')
+          .select('external_id')
+          .eq('user_id', user.id)
+          .eq('source', source)
+          .gte('started_at', importStart.toUtc().toIso8601String())
+          .lte('started_at', now.toUtc().toIso8601String());
+      existingIds = <String>{
+        for (final row in existingRows as List<dynamic>)
+          if (row['external_id'] != null) row['external_id'] as String,
+      };
+    } catch (_) {
+      // Network failure — proceed with empty set (old behaviour).
+    }
+
     var importedCount = 0;
     var queuedCount = 0;
     var skippedCount = 0;
+    var alreadySyncedCount = 0;
     var nonWorkoutValues = 0;
     for (final workout in incrementalWorkouts) {
       final value = workout.value;
@@ -195,13 +224,18 @@ class HealthImportService {
         await _localRepository.cacheActivity(activity, syncStatus: 'pending');
         await _syncActivity(duplicate.candidatePayload);
       }
+      final isNew = !existingIds.contains(workout.uuid);
       try {
         if (await _syncActivity(activity)) {
           await _localRepository.markSynced(activity);
         } else {
-          queuedCount++;
+          if (isNew) queuedCount++;
         }
-        importedCount++;
+        if (isNew) {
+          importedCount++;
+        } else {
+          alreadySyncedCount++;
+        }
       } catch (_) {
         rethrow;
       }
@@ -220,7 +254,7 @@ class HealthImportService {
     // on-screen dump. (No ADB on the corporate Pixel, so when it IS empty we
     // surface this on-screen AND persist to import_diagnostics.)
     var diagnostics = '';
-    if (importedCount == 0 && skippedCount == 0) {
+    if (importedCount == 0 && skippedCount == 0 && alreadySyncedCount == 0) {
       final perms = <String, String>{};
       for (final t in _authTypes) {
         try {
@@ -280,6 +314,7 @@ class HealthImportService {
       importedCount: importedCount,
       queuedCount: queuedCount,
       skippedDuplicates: skippedCount,
+      alreadySyncedCount: alreadySyncedCount,
       historyAuthorized: historyAuthorized,
       diagnostics: diagnostics,
     );

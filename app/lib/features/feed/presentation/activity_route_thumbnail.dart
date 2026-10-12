@@ -176,8 +176,8 @@ class _ActivityRouteThumbnailState extends State<ActivityRouteThumbnail> {
                     ? null
                     : CameraFit.coordinates(
                         coordinates: points,
-                        padding: const EdgeInsets.all(18),
-                        maxZoom: 15,
+                        padding: const EdgeInsets.all(32),
+                        maxZoom: 17,
                       ),
                 interactionOptions: InteractionOptions(
                   flags: widget.interactive
@@ -349,8 +349,8 @@ class _StaticMapThumbnailState extends State<_StaticMapThumbnail>
                         ? null
                         : CameraFit.coordinates(
                             coordinates: widget.points,
-                            padding: const EdgeInsets.all(18),
-                            maxZoom: 15,
+                            padding: const EdgeInsets.all(32),
+                            maxZoom: 17,
                           ),
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.none,
