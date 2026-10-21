@@ -379,6 +379,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
       _message = null;
     });
     final activityId = _activityId ??= _sessionId ?? const Uuid().v4();
+    // Stable external_id: generated once per activity, reused across retries.
+    // Previously a new UUID was created on every save attempt, which could
+    // cause a second row if a stale queued sync replayed with the old id
+    // while a retry succeeded with a new one.
+    final externalId = _sessionId ?? activityId;
     const saveTimeout = Duration(seconds: 20);
     const maxRetries = 3;
     const retryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
@@ -401,7 +406,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               'moving_time_s': snapshot.movingTime.inSeconds,
               'elapsed_s': snapshot.elapsed.inSeconds,
               'source': 'phone_gps',
-              'external_id': const Uuid().v4(),
+              'external_id': externalId,
               'track_summary': {
                 'elevation_gain_m': snapshot.elevationGainM.round(),
                 'max_speed_kmh': snapshot.maxSpeedKmh,

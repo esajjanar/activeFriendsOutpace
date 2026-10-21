@@ -15,14 +15,30 @@
 #   If the defines didn't take effect, it fails loudly and tells you NOT to upload.
 #
 # USAGE
-#   export SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
-#   export SUPABASE_PUBLISHABLE_KEY="your_anon_key"
-#   ./build-aab.sh
+#   Option A (recommended): create a .env file next to this script:
+#     SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+#     SUPABASE_PUBLISHABLE_KEY=your_anon_key
+#   Then just:  ./build-aab.sh
+#
+#   Option B: export them yourself:
+#     export SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
+#     export SUPABASE_PUBLISHABLE_KEY="your_anon_key"
+#     ./build-aab.sh
+#
 #   (Bump `version:` in app/pubspec.yaml first if Play rejects the versionCode.)
 #
 set -euo pipefail
 
-# ─── Config: MUST be set via environment variables ───────────────────────────
+# ─── Auto-source .env if present (gitignored — safe for credentials) ─────────
+SCRIPT_DIR_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR_ENV/.env" ]; then
+  set -a  # auto-export every variable that is sourced
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR_ENV/.env"
+  set +a
+fi
+
+# ─── Config: MUST be set via environment variables or .env ───────────────────
 SUPABASE_URL="${SUPABASE_URL:-}"
 SUPABASE_PUBLISHABLE_KEY="${SUPABASE_PUBLISHABLE_KEY:-}"
 # ─────────────────────────────────────────────────────────────────────────────

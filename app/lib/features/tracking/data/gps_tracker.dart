@@ -239,12 +239,22 @@ class GpsTracker {
             if (!_autoPaused && durationS > 0 && !_manuallyPaused) {
               _movingTime += Duration(seconds: durationS);
             }
-            // Distance gate: fixes with accuracy > 50 m are already rejected
-            // (line above), and segment speed > 12 m/s catches GPS teleports.
-            // A stricter per-fix accuracy gate (e.g. <= 25 m) silently drops
-            // distance in urban areas where accuracy bounces 15–45 m — one
-            // mediocre fix kills two segments because _previous still advances.
-            if (!_autoPaused && !_manuallyPaused) {
+            // ── Distance accumulation with noise suppression ──────────
+            // GPS jitter inflates distance by 10-20% when raw Haversine
+            // segments are summed without filtering (random walk effect).
+            //
+            // Guards:
+            // 1. Both fixes must have accuracy ≤ 30 m — loose fixes
+            //    bounce too much. We still ACCEPT the fix for the track
+            //    polyline and for _previous advancement, but we do NOT
+            //    count it towards distance.
+            // 2. Segment must be ≥ 3 m — sub-3 m movements at cycling/
+            //    running speed are almost certainly noise (at 15 km/h
+            //    with 2 s intervals, real segments are ~8 m).
+            // 3. Speed > 12 m/s already caught above (teleport gate).
+            final bothAccurate =
+                previous.accuracy <= 30 && position.accuracy <= 30;
+            if (!_autoPaused && !_manuallyPaused && bothAccurate && segmentM >= 3) {
               _distanceM += segmentM;
               final climb = position.altitude - previous.altitude;
               if (climb >= 3 && previous.accuracy <= 20 && position.accuracy <= 20) {

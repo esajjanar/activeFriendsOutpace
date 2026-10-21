@@ -46,3 +46,4 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+/Users/I589392/mygit/activeFriends/app/android/key.properties

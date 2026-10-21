@@ -38,6 +38,7 @@ Pods/
 **/Flutter/.last_build_id
 **/xcuserdata/
 GoogleService-Info.plist
+ExportOptions.plist
 Podfile.lock
 
 # ─── Firebase ─────────────────────────────────────────────────────────────────
@@ -48,6 +49,8 @@ firebase_options.dart
 supabase/.temp/
 
 # ─── Secrets / sensitive data (never commit) ──────────────────────────────────
+.env
+.env.local
 *.dump
 *.keystore
 *.p12

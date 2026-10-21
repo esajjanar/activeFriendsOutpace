@@ -29,8 +29,13 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 // model retirement never 404s us again. Override via the GEMINI_MODEL
 // secret to pin a specific version (e.g. "gemini-2.5-flash").
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
-const INTERNAL_SECRET = Deno.env.get("INTERNAL_WEBHOOK_SECRET") ??
-  "outpace-internal-webhook-2026";
+const INTERNAL_SECRET = Deno.env.get("INTERNAL_WEBHOOK_SECRET");
+if (!INTERNAL_SECRET) {
+  throw new Error(
+    "INTERNAL_WEBHOOK_SECRET is not set — configure it via: " +
+      "npx supabase secrets set INTERNAL_WEBHOOK_SECRET=$(openssl rand -hex 32)",
+  );
+}
 const GEMINI_TIMEOUT_MS = 8_000;
 const DAILY_LLM_BUDGET = Number(Deno.env.get("LLM_DAILY_BUDGET") ?? "500");
 const TITLE_MIN_CHARS = 2;

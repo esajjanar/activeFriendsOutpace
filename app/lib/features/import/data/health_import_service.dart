@@ -48,9 +48,13 @@ class HealthImportService {
   final LocalImportRepository _localRepository;
 
   // Types we actually READ and surface in the import.
+  // DISTANCE_DELTA is read so we can compute per-source distance and avoid
+  // double-counting when multiple apps (Garmin + phone pedometer) write
+  // DistanceRecords for the same time window.
   static const _readTypes = [
     HealthDataType.WORKOUT,
     HealthDataType.HEART_RATE,
+    HealthDataType.DISTANCE_DELTA,
   ];
 
   // Types we must hold READ permission for. When the health package reads a
@@ -132,6 +136,9 @@ class HealthImportService {
     final incrementalWorkouts = incrementalData
         .where((point) => point.type == HealthDataType.WORKOUT)
         .toList();
+    final incrementalDistances = incrementalData
+        .where((point) => point.type == HealthDataType.DISTANCE_DELTA)
+        .toList();
 
     // Fetch external_ids already in Supabase so we can distinguish truly new
     // imports from re-syncs of the same activity (the full-window rescan
@@ -176,7 +183,6 @@ class HealthImportService {
       final workoutType = _mapActivityType(value.workoutActivityType);
       if (await _overlapsOutpaceActivity(
         userId: user.id,
-        type: workoutType,
         start: workout.dateFrom.toUtc(),
         end: workout.dateTo.toUtc(),
       )) {
@@ -194,12 +200,32 @@ class HealthImportService {
           .whereType<NumericHealthValue>()
           .map((sample) => sample.numericValue.toInt())
           .toList();
+      // ── Source-aware distance ─────────────────────────────────────
+      // Health Connect's totalDistance sums ALL DistanceRecord entries
+      // in the workout window regardless of source. If Garmin AND the
+      // phone pedometer both write distance records, the result is
+      // inflated by 10-20%. Fix: sum only the DISTANCE_DELTA records
+      // from the same sourceId as the workout itself. Fall back to
+      // totalDistance when no per-source records are available (iOS /
+      // older data).
+      final sourceAwareDistance = _computeSourceAwareDistance(
+        workout: workout,
+        distanceRecords: incrementalDistances,
+        fallback: value.totalDistance?.toDouble(),
+      );
+
       final activity = <String, dynamic>{
         'user_id': user.id,
         'type': workoutType,
         'started_at': workout.dateFrom.toUtc().toIso8601String(),
         'ended_at': workout.dateTo.toUtc().toIso8601String(),
-        'distance_m': value.totalDistance?.round(),
+        'distance_m': sourceAwareDistance?.round(),
+        // NOTE: The health Flutter package does not expose moving time
+        // separately from elapsed time for workouts — only dateFrom/dateTo.
+        // Both fields get the wall-clock duration. This means pace is
+        // calculated from elapsed (includes pauses) rather than true moving
+        // time. Acceptable for now; a future improvement could estimate
+        // moving time from route data or HR zones.
         'moving_time_s': workout.dateTo.difference(workout.dateFrom).inSeconds,
         'elapsed_s': workout.dateTo.difference(workout.dateFrom).inSeconds,
         'avg_hr': heartRates.isEmpty
@@ -217,6 +243,11 @@ class HealthImportService {
         'status': 'pending',
       };
       await _localRepository.cacheActivity(activity, syncStatus: 'pending');
+      // Local same-source dedup (belt-and-suspenders): checks against the
+      // on-device cache for overlapping activities from the same source.
+      // If the cache is stale (app reinstalled / cleared), this may miss a
+      // duplicate — but the Supabase upsert on (user_id, source, external_id)
+      // is the authoritative safety net and prevents actual data corruption.
       final duplicate = await _localRepository.flagDuplicateIfNeeded(activity);
       if (duplicate != null) {
         activity['review_state'] = 'needs_review';
@@ -348,26 +379,33 @@ class HealthImportService {
   }
 
   /// Returns true if [start]–[end] overlaps an existing Outpace GPS activity
-  /// for the same user and activity type by more than 80% of the shorter
-  /// activity's duration. This prevents imports from HealthKit / Health Connect
-  /// from creating duplicates when the user tracked from both Outpace and
-  /// their watch simultaneously.
+  /// for the same user by more than 70% of the shorter activity's duration.
+  /// This prevents imports from HealthKit / Health Connect from creating
+  /// duplicates when the user tracked from both Outpace and their watch
+  /// simultaneously.
+  ///
+  /// The check is **type-agnostic**: a walk in Outpace and a "mixed cardio"
+  /// import from the watch ARE the same activity if the time windows overlap.
+  /// Earlier versions required an exact type match, which caused duplicates
+  /// when the watch auto-classified the activity differently.
   Future<bool> _overlapsOutpaceActivity({
     required String userId,
-    required String type,
     required DateTime start,
     required DateTime end,
   }) async {
-    // Query Outpace GPS activities that could potentially overlap:
-    // same user, same type, and whose time window intersects ours.
+    // Widen the query window by ±2 minutes to catch activities where the
+    // watch and phone were started/stopped a few seconds apart.
+    final windowStart = start.subtract(const Duration(minutes: 2));
+    final windowEnd = end.add(const Duration(minutes: 2));
+
+    // Query ALL Outpace GPS activities (any type) that overlap the window.
     final response = await _client
         .from('activities')
         .select('started_at, ended_at')
         .eq('user_id', userId)
-        .eq('type', type)
         .eq('source', 'phone_gps')
-        .lte('started_at', end.toIso8601String())
-        .gte('ended_at', start.toIso8601String());
+        .lte('started_at', windowEnd.toIso8601String())
+        .gte('ended_at', windowStart.toIso8601String());
 
     final candidates = response as List<dynamic>;
     if (candidates.isEmpty) return false;
@@ -381,20 +419,76 @@ class HealthImportService {
       final gpsDuration = gpsEnd.difference(gpsStart).inSeconds;
       if (gpsDuration <= 0) continue;
 
-      // Calculate overlap
+      // Calculate overlap using the ORIGINAL (non-widened) timestamps.
       final overlapStart = start.isAfter(gpsStart) ? start : gpsStart;
       final overlapEnd = end.isBefore(gpsEnd) ? end : gpsEnd;
       final overlapSecs = overlapEnd.difference(overlapStart).inSeconds;
       if (overlapSecs <= 0) continue;
 
-      // Check if overlap exceeds 80% of the shorter activity
+      // 70% threshold (was 80%) — more forgiving when the watch and phone
+      // disagree on exact start/stop times.
       final shorterDuration =
           importDuration < gpsDuration ? importDuration : gpsDuration;
-      if (overlapSecs / shorterDuration > 0.8) {
+      if (overlapSecs / shorterDuration > 0.7) {
         return true;
       }
     }
     return false;
+  }
+
+  /// Compute distance for a workout using only DistanceRecord entries from
+  /// the same source app (sourceId) as the workout session itself.
+  ///
+  /// Health Connect stores DistanceRecords from ALL contributing apps (Garmin,
+  /// Google Fit, Samsung Health, phone pedometer, etc.). The `health` package's
+  /// `totalDistance` sums them all, which inflates the figure when multiple
+  /// apps track simultaneously (e.g. Garmin watch + phone step counter).
+  ///
+  /// Strategy:
+  /// 1. Filter DISTANCE_DELTA records to the workout's time window.
+  /// 2. Group by sourceId.
+  /// 3. Pick the group from the workout's own sourceId.
+  /// 4. If no matching source records found, fall back to the LARGEST
+  ///    single-source total (heuristic: the device that measured the full
+  ///    session typically has the most distance).
+  /// 5. If no distance records at all, fall back to `totalDistance`.
+  double? _computeSourceAwareDistance({
+    required HealthDataPoint workout,
+    required List<HealthDataPoint> distanceRecords,
+    required double? fallback,
+  }) {
+    // Filter to records within the workout window.
+    final windowRecords = distanceRecords.where((d) {
+      return !d.dateFrom.isBefore(workout.dateFrom) &&
+          !d.dateTo.isAfter(
+            workout.dateTo.add(const Duration(seconds: 30)),
+          );
+    }).toList();
+
+    if (windowRecords.isEmpty) return fallback;
+
+    // Group by sourceId and sum distance per source.
+    final distanceBySource = <String, double>{};
+    for (final record in windowRecords) {
+      final value = record.value;
+      if (value is NumericHealthValue) {
+        distanceBySource[record.sourceId] =
+            (distanceBySource[record.sourceId] ?? 0) +
+                value.numericValue.toDouble();
+      }
+    }
+
+    if (distanceBySource.isEmpty) return fallback;
+
+    // Prefer the workout's own source.
+    final workoutSource = workout.sourceId;
+    if (distanceBySource.containsKey(workoutSource)) {
+      return distanceBySource[workoutSource];
+    }
+
+    // Fallback: use the largest single-source distance (the recording
+    // device that tracked the full session has the highest total).
+    return distanceBySource.values.reduce((a, b) => a > b ? a : b);
   }
 
   /// Human-readable Health Connect status, appended to error messages so the

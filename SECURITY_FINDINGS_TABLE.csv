@@ -1,0 +1,16 @@
+File,Line Number,Pattern,Severity,Credential Type,Value (Redacted),Issue Type,Status,Remediation Priority
+lib/firebase_options.dart,53,AIza,CRITICAL,Firebase Android API Key,AIzaSyAqQ0Nwi6...VsE,Hardcoded Secret,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,54,App ID,CRITICAL,Firebase Android App ID,1:605083180569:android:...,Hardcoded Secret,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,55,Messaging Sender ID,CRITICAL,Firebase Sender ID,605083180569,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,56,Project ID,CRITICAL,Firebase Project,outpace-ab523,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,57,Storage Bucket,CRITICAL,Firebase Resource,outpace-ab523.firebasestorage.app,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,58,Storage Bucket,CRITICAL,Firebase Resource,outpace-ab523.firebasestorage.app,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,61,AIza,CRITICAL,Firebase iOS API Key,AIzaSyBQ8RNcLyJ_...aP4,Hardcoded Secret,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,62,App ID,CRITICAL,Firebase iOS App ID,1:605083180569:ios:...,Hardcoded Secret,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,63,Messaging Sender ID,CRITICAL,Firebase Sender ID,605083180569,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,64,Project ID,CRITICAL,Firebase Project,outpace-ab523,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,65,Storage Bucket,CRITICAL,Firebase Resource,outpace-ab523.firebasestorage.app,Hardcoded Identifier,EXPOSED,IMMEDIATE
+lib/firebase_options.dart,66,Bundle ID,WARNING,iOS Bundle ID,app.activefriends.app,Hardcoded Identifier,EXPOSED,HIGH
+app/.gitignore,N/A,Missing Entry,CRITICAL,Configuration Issue,firebase_options.dart should be ignored,Gitignore Misconfiguration,NOT_IGNORED,IMMEDIATE
+lib/core/config/supabase_config.dart,4-5,String.fromEnvironment,INFO,Supabase Configuration,Uses environment variables,Best Practice,PASS,N/A
+features/auth/presentation/auth_screen.dart,17-417,password references,INFO,Authentication Code,UI references only - no hardcoded passwords,Code Review,PASS,N/A

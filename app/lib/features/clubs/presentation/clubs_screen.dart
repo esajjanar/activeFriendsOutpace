@@ -3,6 +3,8 @@ import 'package:activefriends/core/presentation/app_mark.dart';
 import 'package:activefriends/core/theme/app_colors.dart';
 import 'package:activefriends/features/clubs/data/club_repository.dart';
 import 'package:activefriends/features/clubs/presentation/invite_code_dialog.dart';
+import 'package:activefriends/features/feedback/data/feedback_repository.dart';
+import 'package:activefriends/features/feedback/presentation/feedback_screen.dart';
 import 'package:activefriends/features/import/presentation/watch_import_section.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -20,10 +22,12 @@ class ClubsScreen extends StatefulWidget {
 
 class _ClubsScreenState extends State<ClubsScreen> {
   final _repository = ClubRepository(Supabase.instance.client);
+  final _feedbackRepo = FeedbackRepository(Supabase.instance.client);
   final _controller = TextEditingController();
   final _picker = ImagePicker();
   late Future<List<ClubSummary>> _clubsFuture;
   late Future<bool> _shareRoutesFuture;
+  late Future<int> _feedbackTodayCountFuture;
   var _joining = true;
   var _isSubmitting = false;
   var _shareRoutes = true;
@@ -36,6 +40,7 @@ class _ClubsScreenState extends State<ClubsScreen> {
     super.initState();
     _clubsFuture = _repository.listMine();
     _shareRoutesFuture = _loadRouteSharing();
+    _feedbackTodayCountFuture = _feedbackRepo.todayCount();
     _restoreActiveClub();
     _loadAvatar();
   }
@@ -697,6 +702,73 @@ class _ClubsScreenState extends State<ClubsScreen> {
                 const SizedBox(height: 10),
                 Text(_error!, style: TextStyle(color: colors.accent)),
               ],
+              const SizedBox(height: 28),
+              const _SectionLabel(label: 'FEEDBACK'),
+              const SizedBox(height: 12),
+              FutureBuilder<int>(
+                future: _feedbackTodayCountFuture,
+                builder: (context, snap) {
+                  final used = snap.data ?? 0;
+                  final remaining = (5 - used).clamp(0, 5);
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => const FeedbackScreen(),
+                        ),
+                      );
+                      // Refresh count after returning
+                      if (mounted) {
+                        setState(() {
+                          _feedbackTodayCountFuture =
+                              _feedbackRepo.todayCount();
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: colors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.rate_review_outlined,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Send Feedback',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '$remaining remaining today',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right,
+                            color: colors.textMuted,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           );
         },

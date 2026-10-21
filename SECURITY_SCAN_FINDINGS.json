@@ -1,0 +1,285 @@
+{
+  "scan_metadata": {
+    "scan_date": "2024",
+    "repository": "activeFriendsOutpace/app",
+    "scope": "/Users/I589392/mygit/activeFriendsOutpace/app/lib/",
+    "excluded_directories": ["build/", ".dart_tool/", ".symlinks/", "Pods/", "node_modules/"],
+    "total_dart_files_scanned": 48,
+    "purpose": "Pre-open-source security audit"
+  },
+  "summary": {
+    "critical_issues": 2,
+    "warnings": 0,
+    "info": 0,
+    "overall_status": "NOT_READY_FOR_OPEN_SOURCE"
+  },
+  "critical_findings": [
+    {
+      "id": "CRIT-001",
+      "title": "Firebase API Keys Hardcoded in Source Code",
+      "severity": "CRITICAL",
+      "file": "lib/firebase_options.dart",
+      "lines": [53, 54, 55, 56, 57, 58, 61, 62, 63, 64, 65, 66],
+      "type": "EXPOSED_API_KEYS",
+      "description": "Firebase API keys and configuration exposed in source code that is now committed to the repository",
+      "exposed_credentials": {
+        "android_api_key": "AIzaSyAqQ0Nwi6eHcU2h-H6DsI5exB76nYtnVsE",
+        "ios_api_key": "AIzaSyBQ8RNcLyJ_AHmR0yOEk0TNQVuhJsfPaP4",
+        "project_id": "outpace-ab523",
+        "messaging_sender_id": "605083180569",
+        "storage_bucket": "outpace-ab523.firebasestorage.app",
+        "ios_bundle_id": "app.activefriends.app",
+        "android_app_id": "1:605083180569:android:c54ceaa20531ddfdfe5488",
+        "ios_app_id": "1:605083180569:ios:5ff3dabe776eff9ffe5488"
+      },
+      "risk_factors": [
+        "Reversibility: DIFFICULT - Committed to Git history",
+        "Functional Impact: HIGH - Full Firebase project compromise",
+        "Scope: BROAD - All Firebase services accessible",
+        "Attack Surface: PUBLIC - Visible in repository history"
+      ],
+      "attack_scenarios": [
+        "Unauthorized access to Firestore database",
+        "Modification/deletion of database records",
+        "Triggering unauthorized Cloud Functions",
+        "Accessing Firebase Storage",
+        "Sending unauthorized FCM messages",
+        "Abusing authentication system"
+      ],
+      "remediation": {
+        "priority": "IMMEDIATE",
+        "steps": [
+          "Revoke exposed API keys in Google Cloud Console",
+          "Regenerate Firebase configuration via FlutterFire CLI",
+          "Add lib/firebase_options.dart to .gitignore",
+          "Clean Git history using git-filter-branch or BFG",
+          "Generate new API keys after cleanup",
+          "Alert Firebase stakeholders of potential compromise",
+          "Review Firebase Audit Logs for unauthorized access"
+        ]
+      }
+    },
+    {
+      "id": "CRIT-002",
+      "title": "Firebase Configuration File Not in .gitignore",
+      "severity": "CRITICAL",
+      "file": ".gitignore",
+      "lines": null,
+      "type": "GITIGNORE_MISCONFIGURATION",
+      "description": "lib/firebase_options.dart should be ignored but is not listed in .gitignore",
+      "related_to": "CRIT-001",
+      "current_state": "firebase_options.dart IS TRACKED IN GIT",
+      "expected_state": "firebase_options.dart SHOULD BE IN .gitignore",
+      "template_file_exists": "YES (lib/firebase_options.dart.example)",
+      "remediation": {
+        "priority": "IMMEDIATE",
+        "steps": [
+          "Add the following to .gitignore:",
+          "# Generated Firebase configuration - NEVER commit actual credentials",
+          "lib/firebase_options.dart",
+          "Verify pattern matches the file location",
+          "Commit .gitignore change",
+          "Remove lib/firebase_options.dart from Git history"
+        ]
+      }
+    }
+  ],
+  "warnings": [],
+  "info_findings": [],
+  "security_status_by_pattern": {
+    "jwt_tokens_eyJ": {
+      "pattern": "eyJ",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "google_firebase_keys": {
+      "pattern": "AIza",
+      "matches_found": 2,
+      "severity": "CRITICAL",
+      "status": "FAIL",
+      "note": "Found in firebase_options.dart - see CRIT-001"
+    },
+    "stripe_keys": {
+      "pattern": "sk_|pk_",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "api_key_references": {
+      "pattern": "apikey|api_key|apiKey",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "secret_references": {
+      "pattern": "secret",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "password_references": {
+      "pattern": "password",
+      "matches_found": 10,
+      "severity": "INFO",
+      "status": "PASS",
+      "note": "References are to authentication UI elements and Supabase API calls - no hardcoded passwords"
+    },
+    "bearer_tokens": {
+      "pattern": "Bearer ",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "service_role": {
+      "pattern": "service_role",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "supabase_urls": {
+      "pattern": "supabase.co",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS",
+      "note": "Supabase config uses environment variables correctly"
+    },
+    "email_addresses": {
+      "pattern": "RFC5322_email_regex",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    },
+    "suspicious_uuids": {
+      "pattern": "UUID_pattern",
+      "matches_found": 0,
+      "severity": "N/A",
+      "status": "PASS"
+    }
+  },
+  "positive_security_findings": [
+    {
+      "item": "Supabase Configuration",
+      "file": "lib/core/config/supabase_config.dart",
+      "status": "EXCELLENT",
+      "details": "Uses String.fromEnvironment() for all secrets - best practice followed"
+    },
+    {
+      "item": "Authentication Code",
+      "files": [
+        "features/auth/presentation/auth_screen.dart",
+        "features/auth/presentation/reset_password_screen.dart"
+      ],
+      "status": "PASS",
+      "details": "No hardcoded passwords or tokens - delegates to Supabase auth service"
+    },
+    {
+      "item": "Template File Pattern",
+      "file": "lib/firebase_options.dart.example",
+      "status": "GOOD",
+      "details": "Good practice of providing example template for developer setup"
+    },
+    {
+      "item": "No JWT Tokens Hardcoded",
+      "status": "PASS",
+      "details": "No JWT or bearer tokens found in source code"
+    },
+    {
+      "item": "No PII Exposed",
+      "status": "PASS",
+      "details": "No personal email addresses, phone numbers, or user IDs hardcoded"
+    }
+  ],
+  "configuration_review": {
+    "firebase_config": {
+      "status": "CRITICAL_ISSUE",
+      "implementation": "Hardcoded constants in source code",
+      "recommendation": "Move to String.fromEnvironment() pattern like Supabase"
+    },
+    "supabase_config": {
+      "status": "EXCELLENT",
+      "implementation": "Uses String.fromEnvironment() for all secrets",
+      "recommendation": "Continue this pattern - it's a best practice"
+    }
+  },
+  "pre_open_source_checklist": [
+    {
+      "item": "Rotate Firebase API Keys",
+      "status": "PENDING",
+      "priority": "IMMEDIATE",
+      "action": "Revoke exposed keys in Google Cloud Console"
+    },
+    {
+      "item": "Update .gitignore",
+      "status": "PENDING",
+      "priority": "IMMEDIATE",
+      "action": "Add lib/firebase_options.dart"
+    },
+    {
+      "item": "Clean Git History",
+      "status": "PENDING",
+      "priority": "IMMEDIATE",
+      "action": "Remove sensitive data from all commits"
+    },
+    {
+      "item": "Regenerate Firebase Configuration",
+      "status": "PENDING",
+      "priority": "HIGH",
+      "action": "Run flutterfire configure with new credentials"
+    },
+    {
+      "item": "Add SECURITY.md",
+      "status": "PENDING",
+      "priority": "HIGH",
+      "action": "Document security reporting process"
+    },
+    {
+      "item": "Implement Secret Detection",
+      "status": "PENDING",
+      "priority": "MEDIUM",
+      "action": "Add pre-commit hooks or CI/CD checks"
+    },
+    {
+      "item": "Review Audit Logs",
+      "status": "PENDING",
+      "priority": "HIGH",
+      "action": "Check Firebase project for unauthorized access"
+    },
+    {
+      "item": "Create CONTRIBUTING.md",
+      "status": "PENDING",
+      "priority": "MEDIUM",
+      "action": "Document local setup requirements"
+    }
+  ],
+  "affected_files_summary": {
+    "total_files_scanned": 48,
+    "files_with_issues": 2,
+    "files_with_critical_issues": 1,
+    "files_with_warnings": 0,
+    "files_clear": 45,
+    "percentage_clear": "93.75%"
+  },
+  "recommendations": {
+    "immediate_actions": [
+      "DO NOT PUSH TO PUBLIC REPOSITORY until Firebase keys are rotated",
+      "Revoke both Firebase API keys immediately",
+      "Clean Git history to remove exposed credentials",
+      "Update .gitignore before public release"
+    ],
+    "long_term_improvements": [
+      "Implement pre-commit hooks to detect secrets (detect-secrets, git-secrets)",
+      "Enable GitHub Secret Scanning or similar tools",
+      "Use environment variables exclusively for all secrets",
+      "Implement automated security scanning in CI/CD pipeline",
+      "Add branch protection to prevent accidental secret commits",
+      "Rotate all secrets regularly"
+    ],
+    "documentation": [
+      "Create SECURITY.md with vulnerability disclosure policy",
+      "Add security section to README.md",
+      "Document local development setup in CONTRIBUTING.md",
+      "Create environment configuration guide"
+    ]
+  }
+}

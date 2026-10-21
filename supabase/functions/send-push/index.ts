@@ -11,9 +11,13 @@ interface WebhookPayload {
   record: {
     id: string;
     user_id: string;
-    type: "reaction" | "comment";
-    activity_id: string;
+    type: "reaction" | "comment" | "feedback";
+    activity_id?: string;
     from_user_id: string;
+    // feedback-specific fields
+    category?: string;
+    screen?: string;
+    submitter?: string;
   };
 }
 
@@ -43,16 +47,30 @@ Deno.serve(async (req) => {
       return new Response("no tokens", { status: 200 });
     }
 
-    const actorName = actor?.display_name ?? "Someone";
-    const body = record.type === "reaction"
-      ? `${actorName} liked your activity`
-      : `${actorName} commented on your activity`;
+    const actorName = record.type === "feedback"
+      ? (record.submitter ?? "Someone")
+      : (actor?.display_name ?? "Someone");
+
+    let title = "Outpace";
+    let body: string;
+    let dataId = record.activity_id ?? record.id;
+
+    if (record.type === "feedback") {
+      const cat = record.category ?? "general";
+      const scr = record.screen ?? "";
+      title = "New Feedback";
+      body = `${actorName}: ${cat}${scr ? ` · ${scr}` : ""}`;
+    } else {
+      body = record.type === "reaction"
+        ? `${actorName} liked your activity`
+        : `${actorName} commented on your activity`;
+    }
 
     const accessToken = await getFcmAccessToken();
 
     const results = await Promise.allSettled(
       tokens.map((t: { token: string }) =>
-        sendFcmMessage(accessToken, t.token, "Outpace", body, record.activity_id)
+        sendFcmMessage(accessToken, t.token, title, body, dataId)
       ),
     );
     const failures = results.filter(
