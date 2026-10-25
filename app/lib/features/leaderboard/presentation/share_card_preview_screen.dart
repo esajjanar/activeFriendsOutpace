@@ -165,16 +165,19 @@ class _WeeklyShareCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            total > 15
-                ? '${club.name} - Top $shown/$total'
-                : club.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              total > 15
+                  ? '${club.name} - Top $shown/$total'
+                  : club.name,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
           const SizedBox(height: 4),

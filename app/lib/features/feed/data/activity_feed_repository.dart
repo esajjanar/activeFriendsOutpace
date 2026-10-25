@@ -28,6 +28,7 @@ class FeedActivity {
     required this.startedAt,
     required this.distanceM,
     required this.movingTimeS,
+    required this.elapsedS,
     required this.points,
     required this.source,
     required this.notes,
@@ -48,6 +49,7 @@ class FeedActivity {
   final DateTime startedAt;
   final int? distanceM;
   final int? movingTimeS;
+  final int? elapsedS;
   final double points;
   final String source;
   final String? notes;
@@ -71,6 +73,7 @@ class FeedActivity {
         startedAt: startedAt,
         distanceM: distanceM,
         movingTimeS: movingTimeS,
+        elapsedS: elapsedS,
         points: points,
         source: source,
         notes: notes,
@@ -92,6 +95,7 @@ class FeedActivity {
     startedAt: DateTime.parse(json['started_at'] as String).toLocal(),
     distanceM: (json['distance_m'] as num?)?.toInt(),
     movingTimeS: (json['moving_time_s'] as num?)?.toInt(),
+    elapsedS: (json['elapsed_s'] as num?)?.toInt(),
     points: (json['points'] as num).toDouble(),
     source: json['source'] as String,
     notes: json['notes'] as String?,

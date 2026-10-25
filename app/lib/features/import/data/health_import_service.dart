@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:activefriends/data/local/app_database.dart';
@@ -168,6 +169,7 @@ class HealthImportService {
     var skippedCount = 0;
     var alreadySyncedCount = 0;
     var nonWorkoutValues = 0;
+    final distanceDiags = <Map<String, dynamic>>[];
     for (final workout in incrementalWorkouts) {
       final value = workout.value;
       if (value is! WorkoutHealthValue) {
@@ -208,11 +210,18 @@ class HealthImportService {
       // from the same sourceId as the workout itself. Fall back to
       // totalDistance when no per-source records are available (iOS /
       // older data).
-      final sourceAwareDistance = _computeSourceAwareDistance(
+      final distResult = _computeSourceAwareDistance(
         workout: workout,
         distanceRecords: incrementalDistances,
         fallback: value.totalDistance?.toDouble(),
       );
+      final sourceAwareDistance = distResult.distance;
+      distanceDiags.add({
+        'type': workoutType,
+        'started_at': workout.dateFrom.toUtc().toIso8601String(),
+        'uuid': workout.uuid,
+        ...distResult.diag,
+      });
 
       final activity = <String, dynamic>{
         'user_id': user.id,
@@ -220,13 +229,14 @@ class HealthImportService {
         'started_at': workout.dateFrom.toUtc().toIso8601String(),
         'ended_at': workout.dateTo.toUtc().toIso8601String(),
         'distance_m': sourceAwareDistance?.round(),
-        // NOTE: The health Flutter package does not expose moving time
-        // separately from elapsed time for workouts — only dateFrom/dateTo.
-        // Both fields get the wall-clock duration. This means pace is
-        // calculated from elapsed (includes pauses) rather than true moving
-        // time. Acceptable for now; a future improvement could estimate
-        // moving time from route data or HR zones.
-        'moving_time_s': workout.dateTo.difference(workout.dateFrom).inSeconds,
+        // The health Flutter package does not expose moving/active time —
+        // Health Connect's ExerciseSessionRecord has no activeDuration field
+        // and the plugin doesn't read ExerciseSegments. Setting moving_time_s
+        // to the wall-clock duration was WRONG: Datta's 3h walk showed
+        // "Moving time: 3h" when real moving time was 1h 6m (from Garmin).
+        // Leave moving_time_s null so the card shows only elapsed time and
+        // calculates pace from elapsed (honest, if slightly conservative).
+        'moving_time_s': null,
         'elapsed_s': workout.dateTo.difference(workout.dateFrom).inSeconds,
         'avg_hr': heartRates.isEmpty
             ? null
@@ -278,6 +288,32 @@ class HealthImportService {
       importedThrough: now,
     );
 
+    // ── Always-on distance diagnostics ──────────────────────────────────
+    // Persisted on every import so we can diagnose source-aware distance
+    // decisions even when workouts import successfully (doubled-distance
+    // bugs only show when data DOES come through).
+    if (distanceDiags.isNotEmpty) {
+      developer.log(
+        'Distance diagnostics (${distanceDiags.length} workouts): '
+        'total DISTANCE_DELTA records=${incrementalDistances.length}',
+        name: 'HealthImport',
+      );
+      try {
+        await _client.from('import_diagnostics').insert({
+          'user_id': user.id,
+          'platform': Platform.isIOS ? 'ios' : 'android',
+          'payload': {
+            'type': 'distance_debug',
+            'raw_distances': incrementalDistances.length,
+            'raw_workouts': incrementalWorkouts.length,
+            'per_workout': distanceDiags,
+          },
+        });
+      } catch (_) {
+        // Best-effort: diagnostics must never break the import.
+      }
+    }
+
     // ── Diagnostics (only when NOTHING came through) ────────────────────
     // Gather + persist the full read breakdown only in the problem case:
     // no imports AND no duplicates skipped. Successful imports and
@@ -328,6 +364,7 @@ class HealthImportService {
         'window_end': now.toIso8601String(),
         'raw_total': incrementalData.length,
         'raw_workouts': incrementalWorkouts.length,
+        'raw_distances': incrementalDistances.length,
         'raw_heart_rates': incrementalHeartRates.length,
         'non_workout_values': nonWorkoutValues,
         'skipped_duplicates': skippedCount,
@@ -436,23 +473,24 @@ class HealthImportService {
     return false;
   }
 
-  /// Compute distance for a workout using only DistanceRecord entries from
-  /// the same source app (sourceId) as the workout session itself.
+  /// Compute distance for a workout, using the workout's own `totalDistance`
+  /// (fallback) as the primary value, with overlap detection as a safety net.
   ///
-  /// Health Connect stores DistanceRecords from ALL contributing apps (Garmin,
-  /// Google Fit, Samsung Health, phone pedometer, etc.). The `health` package's
-  /// `totalDistance` sums them all, which inflates the figure when multiple
-  /// apps track simultaneously (e.g. Garmin watch + phone step counter).
+  /// Previous approach tried to pick one source's DISTANCE_DELTA records,
+  /// but this broke Samsung Health imports where two sources (Samsung Health
+  /// + phone step counter) write COMPLEMENTARY (not duplicate) distance
+  /// records — each covering ~50% of the real distance.
   ///
-  /// Strategy:
-  /// 1. Filter DISTANCE_DELTA records to the workout's time window.
-  /// 2. Group by sourceId.
-  /// 3. Pick the group from the workout's own sourceId.
-  /// 4. If no matching source records found, fall back to the LARGEST
-  ///    single-source total (heuristic: the device that measured the full
-  ///    session typically has the most distance).
-  /// 5. If no distance records at all, fall back to `totalDistance`.
-  double? _computeSourceAwareDistance({
+  /// New strategy (v2):
+  /// 1. Default to `totalDistance` from the workout — this is what Health
+  ///    Connect computes internally and is correct for most devices.
+  /// 2. Only override when we detect temporal overlap in a SINGLE source
+  ///    bucket (all sourceIds/sourceNames collapse to one key), which
+  ///    indicates true duplication (e.g. Garmin + phone pedometer both
+  ///    writing identical DistanceRecords with empty sourceId). In that
+  ///    case, halve the distance.
+  /// 3. Still collect per-source diagnostics for debugging.
+  ({double? distance, Map<String, dynamic> diag}) _computeSourceAwareDistance({
     required HealthDataPoint workout,
     required List<HealthDataPoint> distanceRecords,
     required double? fallback,
@@ -465,30 +503,129 @@ class HealthImportService {
           );
     }).toList();
 
-    if (windowRecords.isEmpty) return fallback;
+    if (windowRecords.isEmpty) {
+      return (
+        distance: fallback,
+        diag: <String, dynamic>{
+          'decision': 'fallback_no_window_records',
+          'total_distance_records': distanceRecords.length,
+          'window_records': 0,
+          'fallback_m': fallback,
+          'workout_source': workout.sourceId,
+          'workout_sourceName': workout.sourceName,
+        },
+      );
+    }
 
-    // Group by sourceId and sum distance per source.
+    // ── Determine source key ──────────────────────────────────────────
+    String sourceKey(HealthDataPoint p) {
+      if (p.sourceId.isNotEmpty) return p.sourceId;
+      if (p.sourceName.isNotEmpty) return 'name:${p.sourceName}';
+      return '';
+    }
+
+    // Group by source key and sum distance per source (for diagnostics).
     final distanceBySource = <String, double>{};
     for (final record in windowRecords) {
       final value = record.value;
       if (value is NumericHealthValue) {
-        distanceBySource[record.sourceId] =
-            (distanceBySource[record.sourceId] ?? 0) +
-                value.numericValue.toDouble();
+        final key = sourceKey(record);
+        distanceBySource[key] =
+            (distanceBySource[key] ?? 0) + value.numericValue.toDouble();
       }
     }
 
-    if (distanceBySource.isEmpty) return fallback;
-
-    // Prefer the workout's own source.
-    final workoutSource = workout.sourceId;
-    if (distanceBySource.containsKey(workoutSource)) {
-      return distanceBySource[workoutSource];
+    if (distanceBySource.isEmpty) {
+      return (
+        distance: fallback,
+        diag: <String, dynamic>{
+          'decision': 'fallback_no_numeric',
+          'window_records': windowRecords.length,
+          'fallback_m': fallback,
+          'workout_source': workout.sourceId,
+          'workout_sourceName': workout.sourceName,
+        },
+      );
     }
 
-    // Fallback: use the largest single-source distance (the recording
-    // device that tracked the full session has the highest total).
-    return distanceBySource.values.reduce((a, b) => a > b ? a : b);
+    final sourceNames = windowRecords.map((r) => r.sourceName).toSet();
+
+    // ── Multi-source: use fallback (totalDistance) ─────────────────────
+    // Multiple distinct sources means Health Connect has records from
+    // different apps. They may be duplicates OR complementary — we can't
+    // reliably tell. The workout's totalDistance is the safest value.
+    if (distanceBySource.length > 1) {
+      return (
+        distance: fallback,
+        diag: <String, dynamic>{
+          'decision': 'fallback_multi_source',
+          'workout_source': workout.sourceId,
+          'workout_sourceName': workout.sourceName,
+          'source_key': sourceKey(workout),
+          'all_sources': distanceBySource.map(
+            (k, v) => MapEntry(k, v.round()),
+          ),
+          'distinct_sourceNames': sourceNames.toList(),
+          'fallback_m': fallback,
+        },
+      );
+    }
+
+    // ── Single source key: check for temporal overlap ─────────────────
+    // When all records collapse into one bucket (empty/identical sourceId
+    // + sourceName), two apps may STILL be writing duplicates (e.g. Garmin
+    // + phone pedometer with identical empty sourceId). Detect by checking
+    // if consecutive records have nearly identical timestamps (≤2s gap).
+    // If ≥40% overlap → halve. Otherwise use fallback.
+    final totalSum = distanceBySource.values.first;
+
+    final sorted = windowRecords
+        .where((r) => r.value is NumericHealthValue)
+        .toList()
+      ..sort((a, b) => a.dateFrom.compareTo(b.dateFrom));
+
+    var overlapCount = 0;
+    for (var i = 1; i < sorted.length; i++) {
+      final gap = sorted[i].dateFrom.difference(sorted[i - 1].dateFrom).abs();
+      if (gap.inSeconds <= 2) {
+        overlapCount++;
+      }
+    }
+
+    final overlapRatio =
+        sorted.length > 1 ? overlapCount / (sorted.length - 1) : 0.0;
+    final isDoubled = overlapRatio >= 0.40;
+    // When overlap detected, halve the DISTANCE_DELTA sum (more accurate
+    // than halving fallback, since fallback may include rounding).
+    // Otherwise, trust the workout's totalDistance.
+    final chosen = isDoubled ? totalSum / 2 : (fallback ?? totalSum);
+
+    developer.log(
+      'sourceAwareDist: SINGLE_BUCKET '
+      '${isDoubled ? "HALVED" : "FALLBACK"} '
+      'overlap=${(overlapRatio * 100).toStringAsFixed(0)}% '
+      'total=${totalSum.round()}m chosen=${chosen.round()}m '
+      'fallback=${fallback?.round()}m '
+      'records=${sorted.length} overlaps=$overlapCount '
+      'sourceNames=$sourceNames',
+      name: 'HealthImport',
+    );
+
+    return (
+      distance: chosen,
+      diag: <String, dynamic>{
+        'decision': isDoubled ? 'halved_overlap' : 'fallback_single_source',
+        'workout_source': workout.sourceId,
+        'workout_sourceName': workout.sourceName,
+        'total_sum_m': totalSum.round(),
+        'chosen_m': chosen.round(),
+        'window_records': sorted.length,
+        'overlap_count': overlapCount,
+        'overlap_ratio': double.parse(overlapRatio.toStringAsFixed(2)),
+        'distinct_sourceNames': sourceNames.toList(),
+        'fallback_m': fallback,
+      },
+    );
   }
 
   /// Human-readable Health Connect status, appended to error messages so the

@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Outpace can use your camera to take a profile photo.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Outpace reads your workouts to build your club leaderboard.</string>
 	<key>NSHealthUpdateUsageDescription</key>
@@ -34,8 +36,6 @@
 	<string>Outpace uses your location in the background to keep recording when your screen is off.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Outpace uses your location to record GPS routes during activities.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Outpace can use your camera to take a profile photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Outpace needs access to your photo library to let you set a profile photo.</string>
 	<key>UIApplicationSceneManifest</key>

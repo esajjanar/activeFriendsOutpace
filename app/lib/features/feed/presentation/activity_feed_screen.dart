@@ -818,18 +818,20 @@ class _MetricsRow extends StatelessWidget {
         style: valueStyle,
       ));
     }
-    if (activity.movingTimeS != null) {
+    // Prefer moving time; fall back to elapsed time for health_connect imports
+    // where moving time is unavailable (Health Connect doesn't expose it).
+    final displayTimeS = activity.movingTimeS ?? activity.elapsedS;
+    final timeLabel = activity.movingTimeS != null ? null : 'elapsed';
+    if (displayTimeS != null) {
       items.add(_StatItem(
         icon: Icons.timer_outlined,
-        label: formatDurationSeconds(activity.movingTimeS!),
+        label: formatDurationSeconds(displayTimeS),
         color: _timeColor,
         style: valueStyle,
       ));
     }
-    if (activity.distanceM != null &&
-        activity.movingTimeS != null &&
-        activity.movingTimeS! > 0) {
-      final hours = activity.movingTimeS! / 3600;
+    if (activity.distanceM != null && displayTimeS != null && displayTimeS > 0) {
+      final hours = displayTimeS / 3600;
       items.add(_StatItem(
         icon: Icons.speed,
         label: '${(activity.distanceM! / 1000 / hours).toStringAsFixed(1)} km/h',

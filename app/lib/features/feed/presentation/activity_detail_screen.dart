@@ -589,13 +589,19 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         (activity['track_summary'] as Map?) ?? const {},
       );
 
+  /// Duration (seconds) to use for pace/speed: prefer moving_time_s, fall
+  /// back to elapsed_s when moving time is unavailable (health_connect imports
+  /// cannot read active duration from Health Connect).
+  static num _timeForPace(Map<String, dynamic> activity) =>
+      (activity['moving_time_s'] as num?) ??
+      (activity['elapsed_s'] as num?) ??
+      0;
+
   static bool _hasDistanceAndTime(Map<String, dynamic> activity) =>
-      (activity['distance_m'] as num? ?? 0) > 0 &&
-      (activity['moving_time_s'] as num? ?? 0) > 0;
+      (activity['distance_m'] as num? ?? 0) > 0 && _timeForPace(activity) > 0;
 
   static String _paceLabel(Map<String, dynamic> activity) {
-    final secondsPerKilometer =
-        (activity['moving_time_s'] as num).toDouble() /
+    final secondsPerKilometer = _timeForPace(activity).toDouble() /
         ((activity['distance_m'] as num).toDouble() / 1000);
     final minutes = secondsPerKilometer ~/ 60;
     final seconds = (secondsPerKilometer % 60).round();
@@ -604,7 +610,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
   static String _speedLabel(Map<String, dynamic> activity) {
     final kilometers = (activity['distance_m'] as num).toDouble() / 1000;
-    final hours = (activity['moving_time_s'] as num).toDouble() / 3600;
+    final hours = _timeForPace(activity).toDouble() / 3600;
     return '${(kilometers / hours).toStringAsFixed(1)} km/h';
   }
 }

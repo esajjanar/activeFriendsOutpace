@@ -248,13 +248,14 @@ class GpsTracker {
             //    bounce too much. We still ACCEPT the fix for the track
             //    polyline and for _previous advancement, but we do NOT
             //    count it towards distance.
-            // 2. Segment must be ≥ 3 m — sub-3 m movements at cycling/
-            //    running speed are almost certainly noise (at 15 km/h
-            //    with 2 s intervals, real segments are ~8 m).
+            // 2. Segment must be ≥ 1.5 m — filters GPS jitter at
+            //    standstill (~0.5–1 m noise) while passing normal
+            //    walking pace (~1.4 m/s × 2 s = 2.8 m per segment).
+            //    Previous 3 m threshold rejected most walk segments.
             // 3. Speed > 12 m/s already caught above (teleport gate).
             final bothAccurate =
                 previous.accuracy <= 30 && position.accuracy <= 30;
-            if (!_autoPaused && !_manuallyPaused && bothAccurate && segmentM >= 3) {
+            if (!_autoPaused && !_manuallyPaused && bothAccurate && segmentM >= 1.5) {
               _distanceM += segmentM;
               final climb = position.altitude - previous.altitude;
               if (climb >= 3 && previous.accuracy <= 20 && position.accuracy <= 20) {

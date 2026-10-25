@@ -46,4 +46,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
-/Users/I589392/mygit/activeFriends/app/android/key.properties
+
+# Android signing
+/android/key.properties
+
+# Firebase — NEVER commit actual credentials
+lib/firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
