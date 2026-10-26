@@ -62,23 +62,39 @@ class PushNotificationService {
     });
 
     // On iOS, FCM needs an APNs token first. It may not be ready immediately
-    // after permission is granted (APNs registration is async). Retry a few
-    // times before giving up — onTokenRefresh will catch it later regardless.
+    // after permission is granted (APNs registration is async). Poll with
+    // back-off — 5 attempts × 2s = 10s max, enough for the native
+    // registerForRemoteNotifications() round-trip to Apple's servers.
     String? apnsStatus;
+    int apnsRetryCount = 0;
+    final initStart = DateTime.now();
     if (Platform.isIOS) {
       var apnsToken = await _messaging.getAPNSToken();
       if (apnsToken == null) {
-        for (var attempt = 0; attempt < 3; attempt++) {
+        for (var attempt = 1; attempt <= 5; attempt++) {
+          apnsRetryCount = attempt;
+          if (kDebugMode) {
+            debugPrint('[outpace][push] APNs poll attempt $attempt/5 …');
+          }
           await Future<void>.delayed(const Duration(seconds: 2));
           apnsToken = await _messaging.getAPNSToken();
-          if (apnsToken != null) break;
+          if (apnsToken != null) {
+            if (kDebugMode) {
+              debugPrint('[outpace][push] APNs token arrived on attempt $attempt');
+            }
+            break;
+          }
         }
         if (apnsToken == null) {
-          apnsStatus = 'null_after_retries';
+          apnsStatus = 'null_after_${apnsRetryCount}_retries';
           if (kDebugMode) {
-            debugPrint('[outpace][push] APNs token still null after retries — '
-                'will rely on onTokenRefresh');
+            debugPrint('[outpace][push] APNs token still null after $apnsRetryCount '
+                'retries — will rely on onTokenRefresh');
           }
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('[outpace][push] APNs token available immediately');
         }
       }
       apnsStatus ??= 'present_${apnsToken!.length}bytes';
@@ -86,12 +102,22 @@ class PushNotificationService {
 
     // Always attempt to get the FCM token AND register the refresh listener,
     // even if APNs wasn't ready yet. onTokenRefresh fires once APNs completes.
-    // Attach the refresh listener FIRST, so that if the initial getToken()
-    // fails (on iOS it can throw apns-token-not-set when APNs registration
-    // hasn't completed yet), we still capture the token once APNs finishes
-    // and onTokenRefresh fires. Previously a throw here skipped the listener
-    // entirely, leaving the device permanently unregistered.
-    _messaging.onTokenRefresh.listen(_saveToken);
+    _messaging.onTokenRefresh.listen((newToken) {
+      if (kDebugMode) {
+        debugPrint('[outpace][push] onTokenRefresh fired: '
+            '${newToken.substring(0, 12)}…(${newToken.length})');
+      }
+      _saveToken(newToken);
+      // Write a follow-up diagnostic so we can see late token arrival
+      if (Platform.isIOS) {
+        _writeDiagnostics(<String, dynamic>{
+          'event': 'onTokenRefresh',
+          'fcm_token': '${newToken.substring(0, 12)}…(${newToken.length})',
+          'ts': DateTime.now().toUtc().toIso8601String(),
+        });
+      }
+    });
+
     String? fcmToken;
     String? fcmError;
     try {
@@ -111,13 +137,21 @@ class PushNotificationService {
     // ── iOS push diagnostics: write to Supabase + keep in memory ──
     if (Platform.isIOS) {
       final settings = await _messaging.getNotificationSettings();
+      final elapsed = DateTime.now().difference(initStart);
       final diag = <String, dynamic>{
+        'event': 'init_complete',
         'authorization': settings.authorizationStatus.name,
+        'alert': settings.alert.name,
+        'badge': settings.badge.name,
+        'sound': settings.sound.name,
         'apns_token': apnsStatus,
+        'apns_retries': apnsRetryCount,
         'fcm_token': fcmToken != null
             ? '${fcmToken.substring(0, 12)}…(${fcmToken.length})'
             : null,
         'fcm_error': fcmError,
+        'init_duration_ms': elapsed.inMilliseconds,
+        'ios_version': Platform.operatingSystemVersion,
         'ts': DateTime.now().toUtc().toIso8601String(),
       };
       lastDiagnostics = diag;

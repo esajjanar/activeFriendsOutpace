@@ -49,13 +49,18 @@ class HealthImportService {
   final LocalImportRepository _localRepository;
 
   // Types we actually READ and surface in the import.
-  // DISTANCE_DELTA is read so we can compute per-source distance and avoid
-  // double-counting when multiple apps (Garmin + phone pedometer) write
-  // DistanceRecords for the same time window.
-  static const _readTypes = [
+  // DISTANCE_DELTA is read on Android so we can compute per-source distance
+  // and avoid double-counting when multiple apps (Garmin + phone pedometer)
+  // write DistanceRecords for the same time window.
+  // ⚠️ DISTANCE_DELTA is Android-only in the health package — it has no iOS
+  // HealthKit mapping. Passing it to getHealthDataFromTypes on iOS causes the
+  // plugin to return FlutterError(INVALID_TYPE), which kills the entire read
+  // (including WORKOUT and HEART_RATE). On iOS we fall back to the workout's
+  // built-in totalDistance instead.
+  static final _readTypes = [
     HealthDataType.WORKOUT,
     HealthDataType.HEART_RATE,
-    HealthDataType.DISTANCE_DELTA,
+    if (Platform.isAndroid) HealthDataType.DISTANCE_DELTA,
   ];
 
   // Types we must hold READ permission for. When the health package reads a
