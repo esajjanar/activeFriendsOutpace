@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:activefriends/features/import/data/health_import_service.dart';
 import 'package:flutter/material.dart';
 
@@ -51,8 +53,9 @@ class _WatchImportSectionState extends State<WatchImportSection> {
       }
     } on HealthImportException catch (error) {
       if (mounted) setState(() => _message = error.message);
-    } catch (_) {
-      if (mounted) setState(() => _message = 'Watch import could not finish. Check your health permissions and try again.');
+    } catch (error, stack) {
+      developer.log('Watch import failed', error: error, stackTrace: stack, name: 'WatchImport');
+      if (mounted) setState(() => _message = 'Watch import could not finish.\n\nDetails: $error');
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
