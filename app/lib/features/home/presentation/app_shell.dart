@@ -209,170 +209,51 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _activeClubFuture;
   }
 
-  void _showAccountActions() {
-    showModalBottomSheet<void>(
+  Future<void> _handleTrackActivity() async {
+    final choice = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sign out'),
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                if (!mounted) return;
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (dlg) => AlertDialog(
-                    title: const Text('Sign out?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dlg).pop(false),
-                        child: const Text('Cancel'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.of(dlg).pop(true),
-                        child: const Text('Sign out'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await Supabase.instance.client.auth.signOut();
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bug_report),
-              title: const Text('Push debug info'),
-              subtitle: const Text('Tap to view iOS push diagnostics'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                final diag = PushNotificationService.instance.lastDiagnostics;
-                final text = diag != null
-                    ? const JsonEncoder.withIndent('  ').convert(diag)
-                    : 'No diagnostics yet — relaunch the app on iOS.';
-                showDialog<void>(
-                  context: context,
-                  builder: (dlg) => AlertDialog(
-                    title: const Text('Push diagnostics'),
-                    content: SingleChildScrollView(
-                      child: SelectableText(
-                        text,
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dlg).pop(),
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text(
-                'Delete account',
-                style: TextStyle(color: Colors.red),
-              ),
+              leading: const Icon(Icons.gps_fixed),
+              title: const Text('Track with GPS'),
               subtitle: const Text(
-                'Permanently deletes your account and all data',
+                'Live tracking for run, walk or cycle',
               ),
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                if (!mounted) return;
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (dlg) {
-                    var typed = '';
-                    return StatefulBuilder(
-                      builder: (dlg, setDialogState) {
-                        final matches = typed == 'delete my account';
-                        return AlertDialog(
-                          title: const Text('Delete account?'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'This will permanently delete your account, all your activities, and remove you from all clubs. This cannot be undone.',
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Type "delete my account" to confirm:',
-                                style: Theme.of(dlg).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                autofocus: true,
-                                decoration: const InputDecoration(
-                                  hintText: 'delete my account',
-                                  isDense: true,
-                                ),
-                                onChanged: (value) =>
-                                    setDialogState(() => typed = value),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(dlg).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                disabledBackgroundColor: Colors.red.withValues(alpha: 0.3),
-                              ),
-                              onPressed: matches
-                                  ? () => Navigator.of(dlg).pop(true)
-                                  : null,
-                              child: const Text('Delete permanently'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                );
-                if (confirm == true && mounted) {
-                  try {
-                    await Supabase.instance.client.functions.invoke(
-                      'delete-account',
-                    );
-                    await Supabase.instance.client.auth.signOut(
-                      scope: SignOutScope.local,
-                    );
-                  } on FunctionException catch (_) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Account deletion failed. Please try again.',
-                          ),
-                        ),
-                      );
-                    }
-                  } catch (_) {
-                    // ignore unexpected errors
-                  }
-                }
-              },
+              onTap: () => Navigator.of(ctx).pop('gps'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.fitness_center),
+              title: const Text('Log manually'),
+              subtitle: const Text(
+                'Strength, past activities, no GPS needed',
+              ),
+              onTap: () => Navigator.of(ctx).pop('manual'),
             ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
+    if (!mounted) return;
+    String? savedActivityId;
+    if (choice == 'gps') {
+      savedActivityId = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => const TrackingScreen()),
+      );
+    } else if (choice == 'manual') {
+      savedActivityId = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => const ManualActivityScreen(),
+        ),
+      );
+    }
+    if (savedActivityId != null && mounted) {
+      await _feedKey.currentState?.refreshUntilContains(savedActivityId);
+      if (mounted) setState(() => _index = 1);
+    }
   }
 
   @override
@@ -380,106 +261,55 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     return ConnectionAwareBuilder(
       onReconnect: _reloadActiveClub,
       child: FutureBuilder<ClubSummary?>(
-      future: _activeClubFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-            body: OfflineErrorView(
-              message: 'Could not load your profile.',
-              onRetry: _reloadActiveClub,
+        future: _activeClubFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return Scaffold(
+              body: OfflineErrorView(
+                message: 'Could not load your profile.',
+                onRetry: _reloadActiveClub,
+              ),
+            );
+          }
+          final activeClub = snapshot.data;
+          if (activeClub == null) {
+            return Scaffold(
+              body: ClubsScreen(onActiveClubChanged: (_) => _reloadActiveClub()),
+              bottomNavigationBar: _AppNavigation(
+                selectedIndex: 2,
+                unreadCount: 0,
+                profileName: _profileName,
+                onDestinationSelected: (_) {},
+                onTrackActivity: _handleTrackActivity,
+              ),
+            );
+          }
+          final pages = [
+            LeaderboardScreen(club: activeClub),
+            ActivityFeedScreen(key: _feedKey, club: activeClub),
+            ClubsScreen(onActiveClubChanged: (_) => _reloadActiveClub()),
+          ];
+          return StreamBuilder<int>(
+            stream: _isForeground ? _notifications.watchUnreadCount() : null,
+            initialData: 0,
+            builder: (context, notifications) => Scaffold(
+              body: IndexedStack(index: _index, children: pages),
+              bottomNavigationBar: _AppNavigation(
+                selectedIndex: _index,
+                unreadCount: notifications.data ?? 0,
+                profileName: _profileName,
+                onDestinationSelected: (index) => setState(() => _index = index),
+                onTrackActivity: _handleTrackActivity,
+              ),
             ),
           );
-        }
-        final activeClub = snapshot.data;
-        if (activeClub == null) {
-          return Scaffold(
-            body: ClubsScreen(onActiveClubChanged: (_) => _reloadActiveClub()),
-            bottomNavigationBar: _AppNavigation(
-              selectedIndex: 2,
-              unreadCount: 0,
-              profileName: _profileName,
-              onDestinationSelected: (_) {},
-              onSignOut: () => _showAccountActions(),
-            ),
-          );
-        }
-        final pages = [
-          LeaderboardScreen(club: activeClub),
-          ActivityFeedScreen(key: _feedKey, club: activeClub),
-          ClubsScreen(onActiveClubChanged: (_) => _reloadActiveClub()),
-        ];
-        return StreamBuilder<int>(
-          stream: _isForeground ? _notifications.watchUnreadCount() : null,
-          initialData: 0,
-          builder: (context, notifications) => Scaffold(
-            body: IndexedStack(index: _index, children: pages),
-            floatingActionButton: _SplitChevronTrackButton(
-              onTap: () async {
-                final choice = await showModalBottomSheet<String>(
-                  context: context,
-                  builder: (ctx) => SafeArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.gps_fixed),
-                          title: const Text('Track with GPS'),
-                          subtitle: const Text(
-                            'Live tracking for run, walk or cycle',
-                          ),
-                          onTap: () => Navigator.of(ctx).pop('gps'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.fitness_center),
-                          title: const Text('Log manually'),
-                          subtitle: const Text(
-                            'Strength, past activities, no GPS needed',
-                          ),
-                          onTap: () => Navigator.of(ctx).pop('manual'),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
-                );
-                if (!mounted) return;
-                String? savedActivityId;
-                if (choice == 'gps') {
-                  savedActivityId = await Navigator.of(context).push<String>(
-                    MaterialPageRoute(builder: (_) => const TrackingScreen()),
-                  );
-                } else if (choice == 'manual') {
-                  savedActivityId = await Navigator.of(context).push<String>(
-                    MaterialPageRoute(
-                      builder: (_) => const ManualActivityScreen(),
-                    ),
-                  );
-                }
-                if (savedActivityId != null && mounted) {
-                  await _feedKey.currentState?.refreshUntilContains(
-                    savedActivityId,
-                  );
-                  if (mounted) setState(() => _index = 1);
-                }
-              },
-            ),
-            floatingActionButtonLocation: const _TrackButtonLocation(),
-            bottomNavigationBar: _AppNavigation(
-              selectedIndex: _index,
-              unreadCount: notifications.data ?? 0,
-              profileName: _profileName,
-              onDestinationSelected: (index) => setState(() => _index = index),
-              onSignOut: () => _showAccountActions(),
-            ),
-          ),
-        );
-      },
-    ),
+        },
+      ),
     );
   }
 }
@@ -490,14 +320,14 @@ class _AppNavigation extends StatelessWidget {
     required this.unreadCount,
     required this.profileName,
     required this.onDestinationSelected,
-    required this.onSignOut,
+    required this.onTrackActivity,
   });
 
   final int selectedIndex;
   final int unreadCount;
   final String profileName;
   final ValueChanged<int> onDestinationSelected;
-  final VoidCallback onSignOut;
+  final VoidCallback onTrackActivity;
 
   @override
   Widget build(BuildContext context) {
@@ -544,19 +374,10 @@ class _AppNavigation extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                width: 48,
-                child: Semantics(
-                  button: true,
-                  label: 'Sign out',
-                  child: InkWell(
-                    onTap: onSignOut,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.logout, size: 22, color: Colors.red),
-                      ],
-                    ),
-                  ),
+                width: 52,
+                child: _SplitChevronTrackButton(
+                  onTap: onTrackActivity,
+                  compact: true,
                 ),
               ),
             ],
@@ -620,14 +441,19 @@ class _NavItem extends StatelessWidget {
 }
 
 class _SplitChevronTrackButton extends StatelessWidget {
-  const _SplitChevronTrackButton({required this.onTap});
+  const _SplitChevronTrackButton({
+    required this.onTap,
+    this.compact = false,
+  });
 
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppColors>()!;
+    final size = compact ? 38.0 : 62.0;
     return Semantics(
       button: true,
       label: 'Track activity',
@@ -637,8 +463,8 @@ class _SplitChevronTrackButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Ink(
-            width: 62,
-            height: 62,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
               color: const Color(0xFFF1F8F6),
               borderRadius: BorderRadius.circular(14),
@@ -656,19 +482,6 @@ class _SplitChevronTrackButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _TrackButtonLocation extends FloatingActionButtonLocation {
-  const _TrackButtonLocation();
-
-  @override
-  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
-    const size = 62.0;
-    return Offset(
-      (scaffoldGeometry.scaffoldSize.width - size) / 2,
-      scaffoldGeometry.contentBottom - size,
     );
   }
 }
