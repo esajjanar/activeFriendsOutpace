@@ -1,16 +1,18 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:activefriends/core/data/vacation_service.dart';
+import 'package:activefriends/core/presentation/animated_refresh_button.dart';
+import 'package:activefriends/core/presentation/app_mark.dart';
 import 'package:activefriends/core/presentation/connection_aware_builder.dart';
 import 'package:activefriends/core/presentation/offline_error_view.dart';
 import 'package:activefriends/core/theme/app_colors.dart';
 import 'package:activefriends/features/clubs/data/club_repository.dart';
+import 'package:activefriends/features/help/presentation/help_screen.dart';
 import 'package:activefriends/features/leaderboard/data/leaderboard_repository.dart';
 import 'package:activefriends/features/leaderboard/presentation/share_card_preview_screen.dart';
 import 'package:activefriends/features/profile/presentation/profile_avatar.dart';
-import 'package:activefriends/core/presentation/animated_refresh_button.dart';
 import 'package:flutter/material.dart';
-import 'package:activefriends/core/presentation/app_mark.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Podium-specific medal colours — not global enough for AppColors.
@@ -30,11 +32,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   late Future<List<LeaderboardEntry>> _entriesFuture;
   final _repository = LeaderboardRepository(Supabase.instance.client);
   List<LeaderboardEntry>? _latestEntries;
+  bool _vacationEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _entriesFuture = _loadEntries();
+    _loadVacation();
   }
 
   @override
@@ -43,7 +47,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     if (oldWidget.club.id != widget.club.id) {
       _latestEntries = null;
       _entriesFuture = _loadEntries();
+      _loadVacation();
     }
+  }
+
+  Future<void> _loadVacation() async {
+    final enabled = await VacationService.isEnabled();
+    if (!mounted) return;
+    setState(() => _vacationEnabled = enabled);
   }
 
   Future<void> _refresh() async {
@@ -52,6 +63,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       _entriesFuture = future;
     });
     await _entriesFuture;
+    await _loadVacation();
   }
 
   Future<List<LeaderboardEntry>> _loadEntries() async {
@@ -92,120 +104,139 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.club.name),
         actions: [
-          const Padding(
-            padding: EdgeInsets.only(left: 8, right: 8, top: 7),
-            child: AppMark(size: 36, showName: true),
+          GestureDetector(
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HelpScreen()),
+              );
+              await _loadVacation();
+            },
+            child: const Padding(
+              padding: EdgeInsets.only(left: 8, right: 8, top: 7),
+              child: AppMark(size: 36, showName: true),
+            ),
           ),
         ],
       ),
       body: ConnectionAwareBuilder(
         onReconnect: _refresh,
         child: FutureBuilder<List<LeaderboardEntry>>(
-        future: _entriesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return OfflineErrorView(
-              message: 'Standings could not load.\nCheck your connection and try again.',
-              onRetry: _refresh,
-            );
-          }
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) {
-            return const Center(child: Text('No activities yet this week.'));
-          }
-          final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'WEEKLY LEADERBOARD',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      _weekLabel(),
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const Spacer(),
-                    AnimatedRefreshButton(onRefresh: _refresh),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: _latestEntries == null ? null : _share,
-                      child: Icon(
-                        Platform.isIOS ? Icons.ios_share : Icons.share,
-                        size: 24,
-                        color: Theme.of(context).colorScheme.primary.withValues(
-                          alpha: _latestEntries == null ? 0.45 : 1.0,
+          future: _entriesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return OfflineErrorView(
+                message: 'Standings could not load.\nCheck your connection and try again.',
+                onRetry: _refresh,
+              );
+            }
+            final entries = snapshot.data ?? [];
+            if (entries.isEmpty) {
+              return const Center(child: Text('No activities yet this week.'));
+            }
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'WEEKLY LEADERBOARD',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        _weekLabel(),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      AnimatedRefreshButton(onRefresh: _refresh),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: _latestEntries == null ? null : _share,
+                        child: Icon(
+                          Platform.isIOS ? Icons.ios_share : Icons.share,
+                          size: 24,
+                          color: Theme.of(context).colorScheme.primary.withValues(
+                            alpha: _latestEntries == null ? 0.45 : 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Asia/Kolkata',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textMuted,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (entries.length >= 2) ...[
+                    _LeaderboardPodium(
+                      entries: entries.take(3).toList(),
+                      currentUserId: currentUserId,
+                      vacationEnabled: _vacationEnabled,
+                    ),
+                    const SizedBox(height: 20),
                   ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Asia/Kolkata',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.textMuted,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (entries.length >= 2) ...[
-                  _LeaderboardPodium(entries: entries.take(3).toList()),
-                  const SizedBox(height: 20),
+                  for (final indexedEntry
+                      in entries.skip(entries.length >= 2 ? 3 : 0).indexed)
+                    _LeaderboardRow(
+                      rank: indexedEntry.$1 + (entries.length >= 2 ? 4 : 1),
+                      entry: indexedEntry.$2,
+                      isCurrentUser: indexedEntry.$2.memberId == currentUserId,
+                      vacationEnabled: _vacationEnabled,
+                      alternateSurface: indexedEntry.$1.isOdd,
+                    ),
                 ],
-                for (final indexedEntry
-                    in entries.skip(entries.length >= 2 ? 3 : 0).indexed)
-                  _LeaderboardRow(
-                    rank: indexedEntry.$1 + (entries.length >= 2 ? 4 : 1),
-                    entry: indexedEntry.$2,
-                    isCurrentUser: indexedEntry.$2.memberId == currentUserId,
-                    alternateSurface: indexedEntry.$1.isOdd,
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 }
 
 class _LeaderboardPodium extends StatelessWidget {
-  const _LeaderboardPodium({required this.entries});
+  const _LeaderboardPodium({
+    required this.entries,
+    required this.currentUserId,
+    required this.vacationEnabled,
+  });
 
   final List<LeaderboardEntry> entries;
+  final String? currentUserId;
+  final bool vacationEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +262,8 @@ class _LeaderboardPodium extends StatelessWidget {
                     : ranks[index] == 2
                     ? 110
                     : 94,
+                isCurrentUser: order[index].memberId == currentUserId,
+                vacationEnabled: vacationEnabled,
               ),
             ),
         ],
@@ -244,17 +277,24 @@ class _PodiumColumn extends StatelessWidget {
     required this.entry,
     required this.rank,
     required this.height,
+    required this.isCurrentUser,
+    required this.vacationEnabled,
   });
 
   final LeaderboardEntry entry;
   final int rank;
   final double height;
+  final bool isCurrentUser;
+  final bool vacationEnabled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppColors>()!;
     final isWinner = rank == 1;
+    final displayName = isCurrentUser && vacationEnabled
+        ? '${entry.displayName} • On stretching mode'
+        : entry.displayName;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Column(
@@ -277,7 +317,7 @@ class _PodiumColumn extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            entry.displayName,
+            displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelLarge?.copyWith(
@@ -368,12 +408,14 @@ class _LeaderboardRow extends StatelessWidget {
     required this.rank,
     required this.entry,
     required this.isCurrentUser,
+    required this.vacationEnabled,
     required this.alternateSurface,
   });
 
   final int rank;
   final LeaderboardEntry entry;
   final bool isCurrentUser;
+  final bool vacationEnabled;
   final bool alternateSurface;
 
   @override
@@ -387,85 +429,88 @@ class _LeaderboardRow extends StatelessWidget {
         : theme.colorScheme.surface;
     final rankColor = rank == 1 ? colors.gold : colors.textMuted;
     final isInactive = entry.points == 0;
+    final displayName = isCurrentUser && vacationEnabled
+        ? '${entry.displayName} • On stretching mode'
+        : entry.displayName;
     return Opacity(
       opacity: isInactive ? 0.45 : 1.0,
       child: Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: highlight,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isCurrentUser ? theme.colorScheme.primary : colors.border,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: highlight,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isCurrentUser ? theme.colorScheme.primary : colors.border,
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 32,
-            child: Text(
-              '$rank',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: rankColor,
-                fontWeight: FontWeight.w900,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              child: Text(
+                '$rank',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: rankColor,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
-          ),
-          ProfileAvatar(
-            displayName: entry.displayName,
-            avatarUrl: entry.avatarUrl,
-            radius: 20,
-            backgroundColor: _avatarColor(entry.memberId),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            ProfileAvatar(
+              displayName: entry.displayName,
+              avatarUrl: entry.avatarUrl,
+              radius: 20,
+              backgroundColor: _avatarColor(entry.memberId),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _metricLabel(entry),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  entry.displayName,
+                  '${entry.points.toStringAsFixed(0)} points',
                   style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w900,
+                    color: entry.points == 0 ? colors.danger : null,
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  _metricLabel(entry),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.textMuted,
-                  ),
+                Wrap(
+                  spacing: 3,
+                  children: entry.activityTypes
+                      .map(
+                        (type) => Icon(
+                          _activityIcon(type),
+                          size: 15,
+                          color: colors.textMuted,
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${entry.points.toStringAsFixed(0)} points',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: entry.points == 0 ? colors.danger : null,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Wrap(
-                spacing: 3,
-                children: entry.activityTypes
-                    .map(
-                      (type) => Icon(
-                        _activityIcon(type),
-                        size: 15,
-                        color: colors.textMuted,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -512,7 +557,9 @@ class _LeaderboardRow extends StatelessWidget {
       'Ordered Uber instead 🚕',
       'Zero steps, zero regrets 🤷',
     ];
-    return shameLines[entry.memberId.codeUnits.fold<int>(0, (s, c) => s + c) % shameLines.length];
+    return shameLines[
+      entry.memberId.codeUnits.fold<int>(0, (s, c) => s + c) % shameLines.length,
+    ];
   }
 
   static IconData _activityIcon(String type) => switch (type) {
@@ -541,4 +588,3 @@ class _LeaderboardRow extends StatelessWidget {
         palette.length];
   }
 }
-
